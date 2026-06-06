@@ -4,7 +4,20 @@ export interface Document {
   page_count: number;
   extraction_strategy: string;
   embedding_status: "pending" | "completed" | "failed";
+  document_type: string | null;
+  pipeline_trace?: PipelineTrace;
   created_at: string;
+}
+
+export interface PipelineTraceStep {
+  step: string;
+  detail?: string;
+}
+
+export interface PipelineTrace {
+  extractor: string;
+  steps: PipelineTraceStep[];
+  extracted_fields: Record<string, unknown>;
 }
 
 export interface DocumentDetail extends Document {

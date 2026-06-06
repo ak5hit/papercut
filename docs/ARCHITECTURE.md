@@ -86,6 +86,57 @@ flowchart LR
    - **Semantic/hybrid answers**: LLM synthesis from retrieved context, with source references.
 4. **Response** — Every answer includes a `ComposedAnswer` with the answer text, source references (document name, page, excerpt), and execution trace (strategy, steps, result counts).
 
+### How QueryClassifier Works
+
+The classifier sends an LLM prompt with:
+- **Category rules** — Clear definitions of when to use STRUCTURED (lookup), SEMANTIC (synthesis), or HYBRID (both)
+- **Filter extraction** — Instructions to identify `document_type`, `field_filters`, and `entity_name` from the question
+- **Few-shot examples** — Concrete examples like "What is Akshit email?" → STRUCTURED, "Summarize work experience" → SEMANTIC, "What did this person do at CRED?" → HYBRID
+- **JSON output** — The LLM returns structured JSON; the classifier parses it into a `ClassificationResult` dataclass
+- **Fallback** — If JSON parsing fails, defaults to SEMANTIC (safest choice for open-ended questions)
+
+The prompt is ~60 lines with explicit rules and examples. Temperature is 0.0 for deterministic classification.
+
+### How AnswerComposer Works
+
+Three different prompt strategies based on retrieval type:
+
+**Structured answers** (`_compose_structured`):
+- Single document: Sends structured fields as JSON, asks LLM to extract the specific value requested
+- Multiple documents: Direct formatting — "Found N matching documents: [list]"
+- No LLM hallucination risk for deterministic facts
+
+**Semantic answers** (`_compose_semantic`):
+- Builds context from retrieved chunks with page numbers
+- Prompt enforces: "Answer using ONLY the provided excerpts"
+- Includes refusal handling: "If the answer is truly not in the excerpts, say 'The documents do not contain enough information'"
+- Special handling for date/duration questions: "Examine ALL excerpts for start and end dates, then calculate the total span"
+- Max 1500 tokens for thorough answers
+
+**Hybrid answers** (`_compose_hybrid`):
+- Combines structured data (key-value pairs) with semantic context (chunk excerpts)
+- Prompt: "Answer using ONLY the provided structured data and document excerpts"
+- Max 1500 tokens, concise factual answers
+
+### How Retrievers Work
+
+**StructuredRetriever** (algorithmic, no LLM):
+- Builds SQLAlchemy queries with JSONB containment operators
+- `field_filters` → `structured_fields.contains({key: value})`
+- `entity_name` → `entities.contains([{"name": entity_name}])`
+- Returns up to 20 matching documents
+
+**SemanticRetriever** (algorithmic, no LLM):
+- Embeds the query using FastEmbed (384-dim BGE vector)
+- Runs pgvector cosine distance search: `embedding <=> query_embedding < 0.8`
+- HNSW index for fast approximate nearest neighbor search
+- Returns up to 10 most similar chunks
+
+**HybridRetriever** (algorithmic, no LLM):
+- Runs structured pre-filter (limit 50 documents)
+- Runs semantic search (limit 5 chunks)
+- Returns both result sets; AnswerComposer merges them
+
 ---
 
 ## Plugin Architecture

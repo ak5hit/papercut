@@ -2,6 +2,37 @@
 
 Universal document intelligence with structured and semantic retrieval. Not just "chat with PDF."
 
+## The Problem
+
+The brief: *"Turn messy documents into structured, queryable data."*
+
+Most document Q&A systems treat every question as a vector search problem. But "What is the total contract value?" shouldn't require semantic similarity — it's a lookup. And "Summarize the payment obligations" shouldn't be answered by regex — it needs understanding.
+
+This platform separates **symbolic knowledge** (structured fields, entities) from **semantic context** (embeddings, natural language). The query planner routes each question to the right retrieval strategy:
+
+- **Structured** — Deterministic facts from JSONB fields. No LLM narration of known values.
+- **Semantic** — Vector similarity for open-ended questions.
+- **Hybrid** — Structured pre-filtering followed by semantic search.
+
+## Scope Decisions
+
+**What I built:**
+- Plugin-based extractor registry (add new document types in ~50 lines)
+- Dual retrieval engine (structured + semantic + hybrid)
+- LLM-based query classifier (routes questions intelligently)
+- Explainable answers (source references, page numbers, execution traces)
+- Full-stack application (FastAPI + Next.js + PostgreSQL + pgvector)
+- 100 tests across 19 files
+
+**What I deliberately left out:**
+- **Authentication/multi-tenancy** — Out of scope for a document intelligence demo
+- **Multiple document formats** — PDF only, but the plugin architecture makes adding CSV/DOCX/XML trivial (see [Extensibility](#extensibility))
+- **Conversation history** — Single-turn Q&A keeps the focus on retrieval quality
+- **Production deployment** — Docker Compose for local development; no Kubernetes, no Terraform
+
+**Why this scope:**
+The goal was to demonstrate engineering judgement, not maximize feature count. Every decision prioritizes clarity, maintainability, and explainability over complexity.
+
 ## Quick Start
 
 ```bash
@@ -10,25 +41,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and upload `sample_technical_document.pdf` from the repo root.
+Open [http://localhost:3000](http://localhost:3000) and upload a text-based PDF.
 
-> **Note:** `sample_technical_document.pdf` is image-dominant (1 page, 8.4 MB). Text extraction is limited. For best results, use a text-based PDF.
-
-## What It Does
-
-1. **Upload** a PDF through the web UI or API.
-2. The system **extracts text, chunks it, generates embeddings**, and runs LLM entity extraction on small documents.
-3. **Ask questions** in natural language.
-4. Receive **answers with source references, page numbers, and an execution trace** showing exactly what happened.
-
-## Key Features
-
-- **Structured Retrieval** — Deterministic queries against JSONB fields (totals, counts, filters). No LLM narration of known facts.
-- **Semantic Retrieval** — Vector similarity search via pgvector and FastEmbed (384-dim BGE embeddings).
-- **Hybrid Retrieval** — Structured pre-filtering followed by semantic search over the filtered subset.
-- **Explainable Answers** — Every response shows source documents, page references, and an execution trace.
-- **Plugin Extractors** — Add new document types by creating one class. The pipeline doesn't change.
-- **LLM Abstraction** — Swap between OpenAI-compatible APIs and Ollama through one environment variable.
+> **Note:** The included `Akshit_Bansal_Resume.pdf` works well for testing. For best results, use text-based PDFs (not scanned images).
 
 ## Architecture
 
@@ -39,68 +54,211 @@ User (Browser) → Next.js (:3000) → FastAPI (:8000) → PostgreSQL 16 + pgvec
                                                     → Extractor Registry (plugin system)
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for Mermaid diagrams covering the ingestion pipeline, query pipeline, and plugin architecture.
+### Ingestion Pipeline
 
-## File: sample_technical_document.pdf
-
-An 8.4 MB sample PDF is included in the repo root for immediate testing.
-
-- **Content:** Scanned/image-dominant (1 page). Text extraction is limited.
-- **Recommendation:** Use your own text-based PDF for better results.
-- **How to use:** Upload via the web UI or with `curl` (see below).
-
-## API
-
-```bash
-# Upload
-curl -X POST -F "file=@sample_technical_document.pdf" http://localhost:8000/documents/upload
-
-# List documents
-curl http://localhost:8000/documents/
-
-# Query
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"query":"Summarize this document"}' \
-  http://localhost:8000/query
+```
+PDF → Extractor Registry → GenericExtractor or ResumeExtractor
+  → Text extraction (pypdf)
+  → Chunking (langchain-text-splitters)
+  → Embeddings (FastEmbed, 384-dim BGE vectors)
+  → Entity extraction (LLM, small docs only)
+  → PostgreSQL (JSONB fields + pgvector HNSW index)
 ```
 
-## Testing
+Small documents (<100k chars) get full LLM extraction. Large documents skip expensive entity extraction — an intentional cost/latency tradeoff documented in [TRADEOFFS.md](docs/TRADEOFFS.md).
+
+### Query Pipeline
+
+```
+User Question → QueryClassifier (LLM)
+  → STRUCTURED: JSONB field/entity search
+  → SEMANTIC: pgvector cosine distance
+  → HYBRID: Structured pre-filter + semantic search
+  → AnswerComposer (LLM synthesis or direct formatting)
+  → Answer + Source References + Execution Trace
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for Mermaid diagrams and detailed flow descriptions.
+
+## Key Engineering Decisions
+
+### 1. Modular Monolith
+Three Docker containers (db, backend, frontend), one cohesive application. No microservices, no Kafka, no Kubernetes. The problem domain doesn't require horizontal scaling of independent services.
+
+### 2. PostgreSQL + pgvector
+One database for both structured data (JSONB) and embeddings (Vector(384)). HNSW index for fast ANN search. Chosen over Qdrant in-memory — data persists across restarts and supports transactional queries.
+
+### 3. FastEmbed (Local, Free)
+BAAI/bge-small-en-v1.5 embeddings generated locally. Zero cost, zero network latency, no API key dependency. 384 dimensions — compact enough for fast retrieval, expressive enough for semantic search.
+
+### 4. Structured Answers: Direct Formatting
+When the query planner routes to STRUCTURED, results are formatted directly from database records. No LLM call. Deterministic questions get deterministic answers — no hallucination risk, no latency, no cost.
+
+### 5. LLM-Based Query Classification
+An LLM prompt classifies each query as STRUCTURED, SEMANTIC, or HYBRID. Natural language doesn't follow simple patterns — "What are the payment terms?" requires semantic search; "Show invoices above ₹50,000" requires structured search. An LLM understands intent better than regex.
+
+See [docs/TRADEOFFS.md](docs/TRADEOFFS.md) for all 10 key decisions with alternatives considered and consequences.
+
+## What's Inside
+
+### Extractor Registry (Plugin System)
+Every extractor implements:
+```python
+class Extractor(ABC):
+    def supports(self, document: DocumentInput) -> float: ...
+    async def extract(self, document: DocumentInput) -> CanonicalDocument: ...
+```
+
+The registry selects the highest-scoring extractor. Currently registered:
+- **ResumeExtractor** (score 0.9 for resumes) — Deterministic extraction (email, phone, LinkedIn) + LLM semantic extraction (name, skills, experience, education)
+- **GenericExtractor** (score 0.1 for any PDF) — Fallback with text extraction, chunking, embeddings, and lightweight metadata
+
+### Three Retrieval Strategies
+- **StructuredRetriever** — JSONB containment queries on `structured_fields` and `entities` columns
+- **SemanticRetriever** — pgvector cosine distance search (< 0.8 threshold) against chunk embeddings
+- **HybridRetriever** — Structured pre-filtering (limit 50) followed by semantic search over the filtered subset
+
+### Explainable Answers
+Every response includes:
+- **Answer text** — LLM synthesis for semantic/hybrid, direct formatting for structured
+- **Source references** — Document name, page number, excerpt
+- **Execution trace** — Strategy used, steps taken, result counts
+
+No fabricated confidence scores. Trust comes from evidence.
+
+### LLM Provider Abstraction
+Swap between OpenAI-compatible APIs and Ollama with one environment variable. All model interactions pass through a common interface.
+
+## Extensibility
+
+Adding a new document type is straightforward. Example: CSV support.
+
+```python
+# backend/extractors/csv_extractor.py
+from extractors.base import Extractor, DocumentInput
+from models.canonical_document import CanonicalDocument
+
+class CSVExtractor(Extractor):
+    def supports(self, document: DocumentInput) -> float:
+        if document.filename.lower().endswith('.csv'):
+            return 0.9
+        return 0.0
+
+    async def extract(self, document: DocumentInput) -> CanonicalDocument:
+        # Parse CSV, populate structured_fields with columns/rows
+        # Return CanonicalDocument
+        pass
+```
+
+```python
+# backend/extractors/registry.py — in create_default_registry()
+from extractors.csv_extractor import CSVExtractor
+
+def create_default_registry(store, llm_provider, embedding_provider):
+    return ExtractorRegistry([
+        CSVExtractor(store, llm_provider, embedding_provider),
+        ResumeExtractor(store, llm_provider, embedding_provider),
+        GenericExtractor(store, llm_provider, embedding_provider),
+    ])
+```
+
+Done. The pipeline runs unchanged. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to add extractors, LLM providers, and retrieval strategies.
+
+## Testing & Quality
+
+100 tests across 19 files covering:
+- Extractor registry selection and scoring
+- Generic extractor threshold logic (small vs. large documents)
+- Canonical schema validation
+- Query planner routing (structured/semantic/hybrid)
+- Structured retrieval (JSONB queries)
+- Semantic search (pgvector cosine distance)
+- Hybrid retrieval (combined results)
+- Answer composer (prompt verification, dispatch logic)
+- Document store CRUD operations
+- LLM provider initialization and completion
+- Embedding generation and error handling
 
 ```bash
 cd backend
 .venv/bin/python -m pytest ../tests/ -v
 ```
 
-> DB-dependent tests require a running PostgreSQL. Run `docker compose up -d` first.
+DB-dependent tests require running PostgreSQL:
+```bash
+docker compose up -d
+.venv/bin/python -m pytest ../tests/ -v
+```
+
+Type checking and linting:
+```bash
+cd backend
+.venv/bin/python -m mypy .
+.venv/bin/python -m ruff check .
+```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 15.1, TypeScript, Tailwind, shadcn/ui |
-| Backend | FastAPI, Python 3.11, Pydantic, SQLAlchemy 2.0 |
+| Frontend | Next.js 15.1, TypeScript, Tailwind |
+| Backend | FastAPI, Python 3.11, Pydantic, SQLAlchemy 2.0 (async) |
 | Database | PostgreSQL 16 + pgvector (HNSW index) |
 | Embeddings | FastEmbed (BAAI/bge-small-en-v1.5, 384-dim) |
 | LLM | OpenAI-compatible APIs or Ollama |
-| Evaluation | RAGAS (Faithfulness, Context Precision) |
+| PDF Parsing | pypdf |
+| Text Splitting | langchain-text-splitters |
+| Migrations | Alembic |
+| Testing | pytest + pytest-asyncio |
+| Linting | Ruff |
+| Type Checking | mypy (strict mode) |
+| Containerization | Docker Compose (3 services) |
 
 ## Project Structure
 
 ```
-backend/         FastAPI application — extractors, query planner, LLM, embeddings, API
-frontend/        Next.js application — single-page upload + query interface
-docs/            Architecture, tradeoffs, contributing, phase plans
-tests/           Backend test suite (pytest + pytest-asyncio)
-legacy/          Original prototype files (superseded, preserved for reference)
+backend/              FastAPI application
+  api/routes/         REST endpoints (health, documents, query)
+  extractors/         Plugin-based document extractors
+  query/              Query planner, classifier, retrievers
+  answers/            Answer composer
+  llm/                LLM provider abstraction
+  embeddings/         Embedding provider abstraction
+  storage/            Database connection, document store
+  models/             Pydantic models, SQLAlchemy ORM
+
+frontend/             Next.js application
+  src/app/            Single-page UI
+  src/components/     Upload, query, answer display
+  src/hooks/          React hooks for state management
+  src/lib/            API client, TypeScript types
+
+docs/                 Architecture, tradeoffs, contributing guide
+tests/                Backend test suite (100 tests)
 ```
 
-## Engineering Tradeoffs
+## Known Limitations
 
-See [docs/TRADEOFFS.md](docs/TRADEOFFS.md) for the 10 key decisions behind this architecture — what was chosen, why, and what was rejected.
+- **Entity extraction disabled** — Commented out in `GenericExtractor` to speed up uploads. Re-enable by uncommenting lines 97-102 in `backend/extractors/generic.py`.
+- **PDF only** — The plugin architecture supports any format, but only PDF extractors are implemented.
+- **No CI/CD** — Tests run locally. No GitHub Actions, no automated deployment.
+- **Single git commit** — The repository shows the final state, not incremental development.
+- **Sample PDF quality** — `Akshit_Bansal_Resume.pdf` works well; the original `sample_technical_document.pdf` was image-dominant and produced poor extraction results.
 
-## Contributing
+## API
 
-See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to add extractors, LLM providers, and retrieval strategies.
+```bash
+# Upload
+curl -X POST -F "file=@document.pdf" http://localhost:8000/documents/upload
+
+# List documents
+curl http://localhost:8000/documents/
+
+# Query
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"query":"What is the email address?"}' \
+  http://localhost:8000/query
+```
 
 ## License
 

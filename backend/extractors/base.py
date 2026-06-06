@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from extractors.pipeline_trace import PipelineTrace
 from models.canonical_document import CanonicalDocument
 
 
@@ -9,6 +10,7 @@ class DocumentInput:
     content: bytes
     filename: str
     content_type: str | None = None
+    document_type: str | None = None
 
 
 class Extractor(ABC):
@@ -17,5 +19,5 @@ class Extractor(ABC):
         ...
 
     @abstractmethod
-    async def extract(self, document: DocumentInput) -> CanonicalDocument:
+    async def extract(self, document: DocumentInput) -> tuple[CanonicalDocument, PipelineTrace]:
         ...

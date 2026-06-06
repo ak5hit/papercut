@@ -56,7 +56,7 @@ async def test_generic_extractor_without_llm_provider(session):
 
     with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Some text."])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
-        document = await extractor.extract(doc_input)
+        document, _trace = await extractor.extract(doc_input)
 
     assert document.entities == []
     assert document.relationships == []
@@ -65,6 +65,7 @@ async def test_generic_extractor_without_llm_provider(session):
 
 @pytest.mark.asyncio
 async def test_generic_extractor_with_llm_provider(session):
+    """Entity extraction is disabled for upload speed; verify no LLM call is made."""
     entities_response = json.dumps({
         "entities": [
             {"name": "Acme Corp", "type": "ORGANIZATION", "value": "Acme Corporation"},
@@ -88,21 +89,13 @@ async def test_generic_extractor_with_llm_provider(session):
     page_text = "Acme Corp invoice. John Doe, CEO. Date: 2024-01-15. Amount: $50,000."
     with patch("extractors.generic.PdfReader", return_value=_mock_reader([page_text])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
-        document = await extractor.extract(doc_input)
+        document, _trace = await extractor.extract(doc_input)
 
-    assert len(document.entities) == 3
-    assert document.entities[0]["name"] == "Acme Corp"
-    assert document.entities[0]["type"] == "ORGANIZATION"
-    assert document.entities[1]["name"] == "2024-01-15"
-    assert document.entities[1]["type"] == "DATE"
-    assert document.entities[2]["name"] == "$50,000"
-    assert document.entities[2]["type"] == "MONEY"
-
-    assert len(document.relationships) == 1
-    assert document.relationships[0]["source"] == "Acme Corp"
-    assert document.relationships[0]["target"] == "John Doe"
-    assert document.relationships[0]["type"] == "WORKS_AT"
-    assert document.relationships[0]["description"] == "CEO of Acme Corp"
+    # Entity extraction is disabled for performance; fields remain empty.
+    assert document.entities == []
+    assert document.relationships == []
+    # Verify the LLM was NOT called for entity extraction.
+    assert provider.prompt_received == ""
 
     assert document.extraction_strategy == "generic_small"
 
@@ -115,7 +108,7 @@ async def test_generic_extractor_llm_failure(session):
 
     with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Some text."])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
-        document = await extractor.extract(doc_input)
+        document, _trace = await extractor.extract(doc_input)
 
     assert document.entities == []
     assert document.relationships == []
@@ -130,7 +123,7 @@ async def test_generic_extractor_malformed_json(session):
 
     with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Some text."])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
-        document = await extractor.extract(doc_input)
+        document, _trace = await extractor.extract(doc_input)
 
     assert document.entities == []
     assert document.relationships == []
@@ -148,7 +141,7 @@ async def test_generic_extractor_large_document_skips_llm(session):
 
     with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Some text."])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
-        document = await extractor.extract(doc_input)
+        document, _trace = await extractor.extract(doc_input)
 
     assert document.extraction_strategy == "generic_large"
     assert document.entities == []

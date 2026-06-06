@@ -4,10 +4,15 @@ import { useState, useCallback, useRef } from "react";
 import { Upload, Loader2, FileText } from "lucide-react";
 
 interface UploadDropzoneProps {
-  onUpload: (file: File) => void;
+  onUpload: (file: File, documentType: string) => void;
   uploading: boolean;
   disabled?: boolean;
 }
+
+const DOCUMENT_TYPES = [
+  { value: "", label: "Auto-detect" },
+  { value: "resume", label: "Resume / CV" },
+] as const;
 
 export function UploadDropzone({
   onUpload,
@@ -15,13 +20,14 @@ export function UploadDropzone({
   disabled = false,
 }: UploadDropzoneProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [documentType, setDocumentType] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const triggerUpload = useCallback(() => {
     if (selectedFile && !uploading && !disabled) {
-      onUpload(selectedFile);
+      onUpload(selectedFile, documentType);
     }
-  }, [selectedFile, uploading, disabled, onUpload]);
+  }, [selectedFile, documentType, uploading, disabled, onUpload]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -48,6 +54,7 @@ export function UploadDropzone({
   const handleSelectNew = useCallback(() => {
     if (uploading || disabled) return;
     setSelectedFile(null);
+    setDocumentType("");
     fileInputRef.current?.click();
   }, [uploading, disabled]);
 
@@ -86,7 +93,24 @@ export function UploadDropzone({
           </p>
         </div>
       ) : (
-        <div className="border rounded-lg p-4 bg-white shadow-sm">
+        <div className="border rounded-lg p-4 bg-white shadow-sm space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Document Type
+            </label>
+            <select
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value)}
+              disabled={disabled || uploading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {DOCUMENT_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-3">
             <FileText className="h-8 w-8 text-blue-500 shrink-0" />
             <div className="min-w-0 flex-1">

@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -25,6 +25,7 @@ def _require_ready(request: Request) -> None:
 @router.post("/upload", status_code=201)
 async def upload_document(
     file: UploadFile,
+    document_type: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     _ready: None = Depends(_require_ready),
 ) -> dict[str, Any]:
@@ -45,8 +46,9 @@ async def upload_document(
         content=content,
         filename=file.filename,
         content_type=file.content_type,
+        document_type=document_type,
     )
-    document = await registry.process(document_input)
+    document, pipeline_trace = await registry.process(document_input)
 
     return {
         "id": str(document.id),
@@ -56,6 +58,8 @@ async def upload_document(
         "embedding_status": document.embedding_status,
         "entities_count": len(document.entities),
         "relationships_count": len(document.relationships),
+        "document_type": document.structured_fields.get("document_type"),
+        "pipeline_trace": pipeline_trace.to_dict(),
         "created_at": document.created_at.isoformat(),
     }
 
@@ -100,6 +104,18 @@ async def get_document(
         "created_at": document.created_at.isoformat(),
         "updated_at": document.updated_at.isoformat(),
     }
+
+
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    store = DocumentStore(session)
+    deleted = await store.delete_document(document_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"deleted": True}
 
 
 @router.get("/{document_id}/chunks")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { listDocuments } from "@/lib/api-client";
+import { listDocuments, deleteDocument as apiDeleteDocument } from "@/lib/api-client";
 import type { Document } from "@/lib/types";
 
 export function useDocuments() {
@@ -22,9 +22,18 @@ export function useDocuments() {
     }
   }, []);
 
+  const deleteDocument = useCallback(async (id: string) => {
+    try {
+      await apiDeleteDocument(id);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete document");
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { documents, loading, error, refresh };
+  return { documents, loading, error, refresh, deleteDocument };
 }

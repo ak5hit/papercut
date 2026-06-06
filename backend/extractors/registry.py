@@ -1,6 +1,8 @@
 from embeddings.base import EmbeddingProvider
 from extractors.base import DocumentInput, Extractor
 from extractors.generic import GenericExtractor
+from extractors.pipeline_trace import PipelineTrace
+from extractors.resume import ResumeExtractor
 from llm.base import LLMProvider
 from models.canonical_document import CanonicalDocument
 from storage.document_store import DocumentStore
@@ -25,7 +27,7 @@ class ExtractorRegistry:
 
         return best_extractor
 
-    async def process(self, document: DocumentInput) -> CanonicalDocument:
+    async def process(self, document: DocumentInput) -> tuple[CanonicalDocument, PipelineTrace]:
         extractor = self.select(document)
         return await extractor.extract(document)
 
@@ -35,4 +37,9 @@ def create_default_registry(
     llm_provider: LLMProvider | None = None,
     embedding_provider: EmbeddingProvider | None = None,
 ) -> ExtractorRegistry:
-    return ExtractorRegistry([GenericExtractor(document_store, llm_provider, embedding_provider)])
+    return ExtractorRegistry(
+        [
+            ResumeExtractor(document_store, llm_provider, embedding_provider),
+            GenericExtractor(document_store, llm_provider, embedding_provider),
+        ]
+    )

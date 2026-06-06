@@ -2,24 +2,29 @@ import pytest
 
 from extractors.base import DocumentInput, Extractor
 from extractors.generic import GenericExtractor
+from extractors.pipeline_trace import PipelineTrace
 from extractors.registry import ExtractorRegistry, create_default_registry
 from models.canonical_document import CanonicalDocument
 from storage.document_store import DocumentStore
 
 
 class _MockExtractor(Extractor):
-    def __init__(self, score: float) -> None:
+    def __init__(self, score: float, name: str = "Mock") -> None:
         self._score = score
+        self._name = name
 
     def supports(self, document: DocumentInput) -> float:
         return self._score
 
-    async def extract(self, document: DocumentInput) -> CanonicalDocument:
-        return CanonicalDocument.create(
+    async def extract(self, document: DocumentInput) -> tuple[CanonicalDocument, PipelineTrace]:
+        doc = CanonicalDocument.create(
             raw_text="mock",
             metadata={"mock": True},
             extraction_strategy="mock",
         )
+        trace = PipelineTrace(extractor=self._name)
+        trace.add_step("Mock extraction")
+        return doc, trace
 
 
 class TestRegistrySelection:
@@ -52,8 +57,9 @@ class TestRegistryProcess:
         mock = _MockExtractor(0.9)
         registry = ExtractorRegistry([mock])
         doc = DocumentInput(content=b"", filename="test.pdf")
-        result = await registry.process(doc)
+        result, trace = await registry.process(doc)
         assert result.extraction_strategy == "mock"
+        assert trace.extractor == "Mock"
 
 
 class TestGenericExtractorSupports:

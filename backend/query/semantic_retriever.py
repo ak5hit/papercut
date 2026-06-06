@@ -13,7 +13,7 @@ class SemanticRetriever:
         self.store = document_store
         self.embedder = embedding_provider
 
-    async def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    async def search(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         query_embedding = self.embedder.embed([query])[0]
         results = await self.store.semantic_search(query_embedding, limit=limit)
         return [

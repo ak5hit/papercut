@@ -80,3 +80,27 @@ async def test_get_nonexistent_document(session):
     store = DocumentStore(session)
     result = await store.get_document(uuid4())
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_document(session):
+    store = DocumentStore(session)
+    doc = CanonicalDocument.create(
+        raw_text="To be deleted",
+        metadata={"filename": "delete.pdf"},
+        extraction_strategy="generic_small",
+    )
+    await store.save_document(doc)
+
+    deleted = await store.delete_document(doc.id)
+    assert deleted is True
+
+    result = await store.get_document(doc.id)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_document(session):
+    store = DocumentStore(session)
+    deleted = await store.delete_document(uuid4())
+    assert deleted is False

@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from answers.models import ComposedAnswer, SourceReference
@@ -13,20 +14,34 @@ class AnswerComposer:
         strategy = result.trace.strategy
 
         if strategy == "structured":
-            return self._compose_structured(question, result)
+            return await self._compose_structured(question, result)
         if strategy == "semantic":
             return await self._compose_semantic(question, result)
         return await self._compose_hybrid(question, result)
 
-    def _compose_structured(self, question: str, result: QueryResult) -> ComposedAnswer:
+    async def _compose_structured(self, question: str, result: QueryResult) -> ComposedAnswer:
         docs = result.documents
         if not docs:
             answer = "No matching documents found."
         elif len(docs) == 1:
             doc = docs[0]
             fields = doc.get("structured_fields", {})
-            lines = [f"**{k}:** {v}" for k, v in fields.items()]
-            answer = "\n".join(lines) if lines else "Document found but no structured fields available."
+            prompt = (
+                f"Answer this question using the structured fields below.\n"
+                f"If the question asks for a specific field (phone, email, name), "
+                f"return ONLY that value — no extra text.\n"
+                f"If asked to show the full resume or all details, "
+                f"format all fields clearly with labels.\n"
+                f"If the structured data contains list/array fields, "
+                f"include ALL items from those lists as bullet points. "
+                f"Do not summarize or skip items — present every entry "
+                f"unless the user explicitly asks for a subset "
+                f"(e.g., 'top 2', 'the last 3', 'oldest').\n"
+                f"If the field is not found, say so briefly.\n\n"
+                f"FIELDS:\n{json.dumps(fields, indent=2)}\n\n"
+                f"QUESTION: {question}"
+            )
+            answer = await self._llm.complete(prompt, max_tokens=300)
         else:
             lines = [f"- **{doc.get('metadata', {}).get('filename', doc['id'])}**" for doc in docs]
             answer = f"Found {len(docs)} matching documents:\n" + "\n".join(lines)
@@ -41,7 +56,7 @@ class AnswerComposer:
 
         result.trace.add_step("Formatted structured answer")
         return ComposedAnswer(
-            answer=answer,
+            answer=answer.strip(),
             sources=sources,
             trace=result.trace.to_dict(),
         )
@@ -145,20 +160,36 @@ class AnswerComposer:
 
     def _build_semantic_prompt(self, question: str, context: str) -> str:
         return (
+            "IMPORTANT: Output ONLY the final answer. Do NOT write any reasoning, "
+            "analysis, or thought process. Start directly with the answer.\n\n"
             "You are a precise document intelligence assistant. "
             "Answer the user's question using ONLY the provided document excerpts. "
-            "If the answer is not in the excerpts, say "
-            "'The documents do not contain enough information to answer this question.'\n\n"
+            "If the answer is truly not in the excerpts, say "
+            "'The documents do not contain enough information to answer this question.' "
+            "However, if relevant information IS present, always provide it — do not refuse to answer "
+            "questions that can be answered from the excerpts.\n\n"
+            "IMPORTANT: If the question asks about duration, timeline, 'how long', 'since when', "
+            "or dates, examine ALL provided excerpts for start and end dates, then calculate the total span. "
+            "For date ranges like 'Mar. 2024 - Present', treat the current date as the end. "
+            "For questions about a person's total experience or time at a company, look at the earliest "
+            "and latest dates across all experience entries.\n\n"
+            "RULES:\n"
+            "- Give ONLY the final answer. Do NOT include your internal reasoning, calculations, or thought process.\n"
+            "- Be thorough — include all relevant details from the excerpts. "
+            "Do not compress multiple facts or entries into a single sentence.\n"
+            "- Use the full context provided — do not omit details.\n\n"
             "DOCUMENT EXCERPTS:\n"
             f"{context}\n\n"
             f"QUESTION: {question}\n\n"
-            "Provide a concise, factual answer."
+            "Provide a thorough, factual answer."
         )
 
     def _build_hybrid_prompt(
         self, question: str, structured_context: str, semantic_context: str
     ) -> str:
         parts = [
+            "IMPORTANT: Output ONLY the final answer. Do NOT write any reasoning, "
+            "analysis, or thought process. Start directly with the answer.\n\n",
             "You are a precise document intelligence assistant. "
             "Answer the user's question using ONLY the provided structured data and document excerpts. "
             "If the answer is not in the provided data, say "
@@ -168,5 +199,16 @@ class AnswerComposer:
             parts.append(f"STRUCTURED DATA:\n{structured_context}\n\n")
         if semantic_context:
             parts.append(f"DOCUMENT EXCERPTS:\n{semantic_context}\n\n")
-        parts.append(f"QUESTION: {question}\n\nProvide a concise, factual answer.")
+        parts.append(
+            "RULES:\n"
+            "- Give ONLY the final answer. Do NOT include your internal reasoning, calculations, or thought process.\n"
+            "- Be thorough — include all relevant details from the provided data. "
+            "Do not compress multiple facts or entries into a single sentence.\n"
+            "- If the structured data contains list/array fields, "
+            "include ALL items from those lists as bullet points. "
+            "Do not summarize or skip items unless the user explicitly asks for a subset.\n"
+            "- Use the full context provided — do not omit details.\n\n"
+            f"QUESTION: {question}\n\n"
+            "Provide a thorough, factual answer."
+        )
         return "".join(parts)

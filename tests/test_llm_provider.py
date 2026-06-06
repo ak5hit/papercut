@@ -33,7 +33,7 @@ class TestOpenAIProvider:
         provider = OpenAICompatibleProvider(api_key="test-key")
         assert provider.model == "gpt-4o-mini"
         assert provider.base_url == "https://api.openai.com/v1"
-        assert provider.timeout == 60.0
+        assert provider.timeout == 120.0
 
     @pytest.mark.asyncio
     async def test_complete_returns_response_text(self) -> None:

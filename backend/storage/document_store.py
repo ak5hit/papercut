@@ -81,6 +81,17 @@ class DocumentStore:
             model.embedding = embedding
         await self.session.commit()
 
+    async def delete_document(self, document_id: UUID) -> bool:
+        result = await self.session.execute(
+            select(DocumentModel).where(DocumentModel.id == document_id)
+        )
+        model = result.scalar_one_or_none()
+        if not model:
+            return False
+        await self.session.delete(model)
+        await self.session.commit()
+        return True
+
     async def semantic_search(
         self, query_embedding: list[float], limit: int = 5
     ) -> list[ChunkSearchResult]:

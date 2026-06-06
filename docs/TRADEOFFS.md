@@ -20,9 +20,9 @@ Every architectural choice involved an intentional tradeoff. This document captu
 
 **What we chose:** PostgreSQL 16 with the pgvector extension for embedding storage and ANN search. HNSW index for fast vector retrieval.
 
-**Why:** The original codebase used Qdrant in-memory — data vanished on restart. PostgreSQL provides persistence, transactional guarantees, and the ability to join structured and vector queries in a single database. One database for both structured fields and embeddings.
+**Why:** PostgreSQL provides persistence, transactional guarantees, and the ability to join structured and vector queries in a single database. One database for both structured fields and embeddings. Data survives container restarts.
 
-**What we rejected:** Qdrant in-memory (original codebase), Pinecone, Weaviate, Milvus.
+**What we rejected:** Qdrant in-memory (data vanishes on restart), Pinecone, Weaviate, Milvus.
 
 **Consequences:** pgvector ANN performance is not state-of-the-art compared to dedicated vector databases. For a single-user system with under 10,000 chunks, this is irrelevant. The simplicity of one database outweighs marginal performance gains.
 
@@ -88,19 +88,7 @@ Every architectural choice involved an intentional tradeoff. This document captu
 
 ---
 
-### 8. RAGAS with Local Ollama Judge
-
-**What we chose:** RAGAS evaluation framework using an Ollama-hosted model as the judge LLM. Metrics: Faithfulness and Context Precision.
-
-**Why:** The original codebase already used RAGAS. Faithfulness measures whether answers are grounded in retrieved context (critical for RAG systems). Using Ollama as the judge avoids dependency on paid API keys for evaluation.
-
-**What we rejected:** Human evaluation (expensive, not reproducible), proprietary benchmarks (vendor lock-in), no evaluation at all.
-
-**Consequences:** The judge LLM's quality depends on the Ollama model. Context precision has limited meaning for structured queries (where "retrieved context" is a database row). These limitations are documented in the evaluation module.
-
----
-
-### 9. GenericExtractor Size Threshold
+### 8. GenericExtractor Size Threshold
 
 **What we chose:** Documents below 100,000 characters get full LLM extraction (entities, structured fields). Documents at or above this threshold get only chunking and embeddings — no LLM extraction.
 
@@ -112,7 +100,7 @@ Every architectural choice involved an intentional tradeoff. This document captu
 
 ---
 
-### 10. CanonicalDocument (Unified Schema)
+### 9. CanonicalDocument (Unified Schema)
 
 **What we chose:** All extractors output a `CanonicalDocument` with the same fields: `metadata`, `raw_text`, `structured_fields`, `entities`, `relationships`, `extraction_strategy`, `embedding_status`.
 

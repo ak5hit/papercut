@@ -17,7 +17,6 @@ export function QueryInterface({ onSubmit, loading }: QueryInterfaceProps) {
     const trimmed = query.trim();
     if (!trimmed || loading) return;
     onSubmit(trimmed);
-    setQuery("");
   };
 
   return (

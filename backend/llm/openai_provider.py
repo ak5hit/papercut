@@ -9,7 +9,7 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str,
         model: str = "gpt-4o-mini",
         base_url: str = "https://api.openai.com/v1",
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ) -> None:
         self.api_key = api_key
         self.model = model
@@ -33,5 +33,14 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             response.raise_for_status()
             data = response.json()
-            content: str = data["choices"][0]["message"]["content"]
+            content: str = data["choices"][0]["message"].get("content") or ""
+            if not content:
+                reasoning = data["choices"][0]["message"].get("reasoning_content") or ""
+                if reasoning:
+                    import re
+
+                    match = re.search(r"\{[\s\S]*\}", reasoning)
+                    if match:
+                        return match.group(0)
+                    return reasoning
             return content

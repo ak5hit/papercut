@@ -22,9 +22,9 @@ class StructuredRetriever:
 
         if field_filters:
             for key, value in field_filters.items():
-                if isinstance(value, dict):
+                if isinstance(value, dict | list):
                     stmt = stmt.where(
-                        DocumentModel.structured_fields.contains(cast(value, JSONB))
+                        DocumentModel.structured_fields.contains(cast({key: value}, JSONB))
                     )
                 else:
                     stmt = stmt.where(
