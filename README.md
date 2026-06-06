@@ -35,9 +35,33 @@ The goal was to demonstrate engineering judgement, not maximize feature count. E
 
 ## Quick Start
 
+Create a `.env` file in the project root:
+
 ```bash
-cp .env.example .env
-# Edit .env — set OPENAI_API_KEY for cloud LLM, or set LLM_PROVIDER=ollama for local
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/doc_intelligence
+
+# LLM Provider (choose one)
+# Option 1: OpenAI-compatible API (OpenAI, OpenCode, etc.)
+LLM_PROVIDER=openai-compatible
+LLM_MODEL=gpt-4o-mini  # or deepseek-v4-flash, etc.
+OPENAI_API_KEY=your-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Option 2: Ollama (local LLM)
+# LLM_PROVIDER=ollama
+# LLM_MODEL=llama3
+# OLLAMA_BASE_URL=http://host.docker.internal:11434
+
+# Embeddings (local, no API key needed)
+EMBEDDING_PROVIDER=fastembed
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+EMBEDDING_DIMENSION=384
+```
+
+Then start the application:
+
+```bash
 docker compose up --build
 ```
 
