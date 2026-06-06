@@ -1,0 +1,136 @@
+# Architecture
+
+## System Overview
+
+```
+                                ┌──────────────────┐
+                                │   User (Browser)  │
+                                └────────┬─────────┘
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │   Next.js (:3000) │
+                                │   Single-page app │
+                                └────────┬─────────┘
+                                         │ /api/* proxy
+                                         ▼
+                                ┌──────────────────┐
+                                │  FastAPI (:8000)  │
+                                │   CORS: *         │
+                                └──┬───────┬───────┘
+                                   │       │
+                    ┌──────────────┤       ├──────────────┐
+                    ▼              ▼       ▼              ▼
+          ┌─────────────┐  ┌───────────┐  ┌──────────┐  ┌─────────────┐
+          │ PostgreSQL   │  │   LLM     │  │Embedding │  │  Extractor  │
+          │ + pgvector   │  │ Provider  │  │ Provider │  │  Registry   │
+          │  (pg16)      │  │           │  │          │  │  (plugin)   │
+          └─────────────┘  └───────────┘  └──────────┘  └─────────────┘
+```
+
+The system is a modular monolith. Three Docker containers (db, backend, frontend) form a single cohesive application. The frontend proxies `/api/*` requests to the backend; file uploads bypass the proxy and go directly to the backend to avoid memory issues with large files.
+
+---
+
+## Ingestion Pipeline
+
+```mermaid
+flowchart LR
+    PDF["PDF Upload"] --> Registry["Extractor Registry"]
+    Registry -->|"supports() score"| Select["Select highest<br/>scoring extractor"]
+    Select --> Generic["GenericExtractor"]
+    Generic -->|"< 100k chars"| Small["Full LLM Extraction<br/>Entities + Structured Fields"]
+    Generic -->|"≥ 100k chars"| Large["Chunking + Embeddings<br/>(no LLM extraction)"]
+    Small --> Canonical["CanonicalDocument"]
+    Large --> Canonical
+    Canonical --> Store["DocumentStore<br/>Insert document + chunks"]
+    Store --> Embed["EmbeddingProvider<br/>Generate 384-dim vectors"]
+    Embed --> DB["PostgreSQL + pgvector<br/>HNSW index"]
+```
+
+### Flow
+
+1. **Upload** — A PDF arrives via `POST /documents/upload`.
+2. **Registry selection** — The `ExtractorRegistry` iterates registered extractors. Each returns a confidence score via `supports()`. The highest-scoring extractor is selected.
+3. **Extraction** — `GenericExtractor.extract()` reads the PDF text via `pypdf`, creates a `CanonicalDocument`, and branches by size:
+   - **Small documents** (< 100,000 chars): Full LLM extraction — entities, relationships, structured fields.
+   - **Large documents** (≥ 100,000 chars): Chunking only (500 char chunks, 50 char overlap). No expensive LLM extraction.
+4. **Persistence** — The canonical document and its chunks are saved to PostgreSQL via `DocumentStore`.
+5. **Embedding** — Each chunk is embedded via `EmbeddingProvider` (FastEmbed, 384-dim BGE vectors) and stored in a `Vector(384)` column with an HNSW index for fast ANN search.
+
+---
+
+## Query Pipeline
+
+```mermaid
+flowchart LR
+    Question["User Question"] --> Classify["QueryClassifier<br/>LLM-based routing"]
+    Classify -->|STRUCTURED| Struct["StructuredRetriever<br/>JSONB entity/field search"]
+    Classify -->|SEMANTIC| Sem["SemanticRetriever<br/>pgvector cosine distance"]
+    Classify -->|HYBRID| Hyb["HybridRetriever<br/>Structured pre-filter<br/>+ semantic search"]
+    Struct --> Compose["AnswerComposer"]
+    Sem --> Compose
+    Hyb --> Compose
+    Compose --> Response["Answer + Source References<br/>+ Execution Trace"]
+```
+
+### Flow
+
+1. **Classification** — `QueryClassifier` uses an LLM to categorize the question as `STRUCTURED`, `SEMANTIC`, or `HYBRID`. Falls back to `SEMANTIC` for unrecognized outputs.
+2. **Routing** — `QueryPlanner.execute()` dispatches to the appropriate retriever:
+   - **STRUCTURED**: `StructuredRetriever` queries `DocumentModel` using SQLAlchemy JSONB containment operators on `entities` and `structured_fields`.
+   - **SEMANTIC**: `SemanticRetriever` embeds the query and runs a pgvector cosine distance search (< 0.8 threshold) against chunk embeddings.
+   - **HYBRID**: `HybridRetriever` first runs structured pre-filtering (limit 50), then semantic search over the filtered subset.
+3. **Composition** — `AnswerComposer` builds the final response:
+   - **Structured answers**: Direct formatting from database results. No LLM involved for deterministic facts.
+   - **Semantic/hybrid answers**: LLM synthesis from retrieved context, with source references.
+4. **Response** — Every answer includes a `ComposedAnswer` with the answer text, source references (document name, page, excerpt), and execution trace (strategy, steps, result counts).
+
+---
+
+## Plugin Architecture
+
+```mermaid
+flowchart TB
+    Doc["Document Input<br/>(.pdf, .csv, .xml...)"] --> Registry["ExtractorRegistry"]
+    Registry -->|"supports() → 0.9"| Invoice["InvoiceExtractor<br/>(future)"]
+    Registry -->|"supports() → 0.8"| Contract["ContractExtractor<br/>(future)"]
+    Registry -->|"supports() → 0.5"| XML["XMLExtractor<br/>(future)"]
+    Registry -->|"supports() → 0.1"| Generic["GenericExtractor<br/>(always present)"]
+    Invoice --> Canonical["CanonicalDocument"]
+    Contract --> Canonical
+    XML --> Canonical
+    Generic --> Canonical
+```
+
+### Interface
+
+Every extractor implements:
+
+```python
+class Extractor(ABC):
+    def supports(self, document: DocumentInput) -> float: ...
+    async def extract(self, document: DocumentInput) -> CanonicalDocument: ...
+```
+
+- `supports()` returns a confidence score (0.0–1.0). The registry selects the highest-scoring extractor.
+- `extract()` produces a `CanonicalDocument` — a unified schema that all downstream modules consume.
+- `GenericExtractor` scores `0.1` for PDFs and acts as the fallback. It's always present in the registry.
+
+### Adding an Extractor
+
+1. Create a class inheriting from `Extractor`.
+2. Implement `supports()` and `extract()`.
+3. Add it to `create_default_registry()`.
+
+The rest of the pipeline — ingestion, storage, embeddings, query — does not change.
+
+---
+
+## Key Design Decisions
+
+- **CanonicalDocument** — All extractors output the same schema. No downstream module depends on document-specific structures.
+- **Extractor registry** — Plugin-based. Adding a new document type requires only a new extractor class.
+- **Query classification** — LLM-driven routing into structured/semantic/hybrid paths. Deterministic questions get deterministic answers.
+- **No fabricated confidence scores** — Answers include source references and execution traces. Trust comes from evidence.
+- **Modular monolith** — Three containers, one cohesive application. No microservices, message queues, or distributed coordination.
