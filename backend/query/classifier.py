@@ -53,24 +53,9 @@ class QueryClassifier:
         '"Summarize the work experience" -> '
         '{{"category": "SEMANTIC", "document_type": null, '
         '"field_filters": null, "entity_name": null}}\n'
-        '"What did John do at Google?" -> '
-        '{{"category": "HYBRID", "document_type": null, '
-        '"field_filters": null, "entity_name": "Google"}}\n'
-        '"List responsibilities at Udaan" -> '
-        '{{"category": "HYBRID", "document_type": null, '
-        '"field_filters": null, "entity_name": "Udaan"}}\n'
         '"What did this person do at CRED?" -> '
         '{{"category": "HYBRID", "document_type": null, '
         '"field_filters": null, "entity_name": "CRED"}}\n'
-        '"How long has Akshit been a software engineer?" -> '
-        '{{"category": "SEMANTIC", "document_type": null, '
-        '"field_filters": null, "entity_name": null}}\n'
-        '"List the responsibilities at Udaan" -> '
-        '{{"category": "HYBRID", "document_type": "resume", '
-        '"field_filters": null, "entity_name": "Udaan"}}\n'
-        '"How long has Akshit been a software engineer?" -> '
-        '{{"category": "SEMANTIC", "document_type": null, '
-        '"field_filters": null, "entity_name": null}}\n'
         "\n"
         "CRITICAL: Your entire response must be ONLY a valid JSON object. "
         "Start directly with {{ and end with }}. "
@@ -83,8 +68,12 @@ class QueryClassifier:
         self._llm = llm_provider
 
     async def classify(self, question: str) -> ClassificationResult:
+        lower = question.lower()
+        if any(kw in lower for kw in ["email", "phone", "linkedin", "url", "github", "twitter"]):
+            return ClassificationResult(category="STRUCTURED")
+
         prompt = self._PROMPT.format(question=question)
-        response = await self._llm.complete(prompt, max_tokens=300)
+        response = await self._llm.complete(prompt, max_tokens=500)
         try:
             data = json.loads(response)
         except json.JSONDecodeError:
