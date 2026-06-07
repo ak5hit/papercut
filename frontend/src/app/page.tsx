@@ -64,7 +64,7 @@ export default function HomePage() {
           </summary>
           <ul className="text-sm text-blue-800 mt-2 ml-6 space-y-1 list-disc list-inside">
             <li><strong>PDFs</strong> — text-based PDFs (not scanned images)</li>
-            <li><strong>Resumes</strong> — auto-detected or manually selected for specialized extraction</li>
+            <li><strong>Resumes</strong> — specialized extraction with structured fields</li>
             <li><strong>Three query types</strong> — structured lookups, semantic search, or hybrid (structured filter + semantic)</li>
           </ul>
         </details>
