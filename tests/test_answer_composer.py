@@ -273,6 +273,24 @@ class TestAnswerComposerHybrid:
         assert "include ALL items" in prompt
         assert "bullet points" in prompt
 
+    def test_strip_reasoning_prefix(self) -> None:
+        composer = AnswerComposer(AsyncMock())
+        result = composer._strip_reasoning(
+            "We are asked: find the answer.\n"
+            "Let me analyze the data.\n\n"
+            "Here is the actual answer.\n"
+            "It has two sentences."
+        )
+        assert "We are asked" not in result
+        assert result.startswith("Here is the actual answer.")
+
+    def test_strip_reasoning_no_match(self) -> None:
+        composer = AnswerComposer(AsyncMock())
+        result = composer._strip_reasoning(
+            "Here is a clean answer without reasoning."
+        )
+        assert result == "Here is a clean answer without reasoning."
+
 
 class TestAnswerComposerDispatch:
 

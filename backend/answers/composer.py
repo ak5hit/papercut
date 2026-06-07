@@ -10,6 +10,23 @@ class AnswerComposer:
     def __init__(self, llm_provider: LLMProvider) -> None:
         self._llm = llm_provider
 
+    @staticmethod
+    def _strip_reasoning(answer: str) -> str:
+        import re
+        prefixes = [
+            r"^We are asked:[\s\S]*?\n\n",
+            r"^Let me [\s\S]*?\n\n",
+            r"^First,[\s\S]*?\n\n",
+            r"^I need to [\s\S]*?\n\n",
+            r"^The user asks[\s\S]*?\n\n",
+            r"^The question[\s\S]*?\n\n",
+        ]
+        for pattern in prefixes:
+            match = re.match(pattern, answer)
+            if match:
+                return answer[match.end():]
+        return answer
+
     async def compose(self, question: str, result: QueryResult) -> ComposedAnswer:
         strategy = result.trace.strategy
 
@@ -41,7 +58,7 @@ class AnswerComposer:
                 f"FIELDS:\n{json.dumps(fields, indent=2)}\n\n"
                 f"QUESTION: {question}"
             )
-            answer = await self._llm.complete(prompt, max_tokens=300)
+            answer = await self._llm.complete(prompt, max_tokens=500)
         else:
             lines = [f"- **{doc.get('metadata', {}).get('filename', doc['id'])}**" for doc in docs]
             answer = f"Found {len(docs)} matching documents:\n" + "\n".join(lines)
@@ -56,7 +73,7 @@ class AnswerComposer:
 
         result.trace.add_step("Formatted structured answer")
         return ComposedAnswer(
-            answer=answer.strip(),
+            answer=self._strip_reasoning(answer.strip()),
             sources=sources,
             trace=result.trace.to_dict(),
         )
@@ -72,7 +89,7 @@ class AnswerComposer:
 
         context = self._build_context(chunks)
         prompt = self._build_semantic_prompt(question, context)
-        answer_text = await self._llm.complete(prompt, max_tokens=1500)
+        answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
         sources = [
             SourceReference(
@@ -87,7 +104,7 @@ class AnswerComposer:
 
         result.trace.add_step("Generated semantic answer via LLM")
         return ComposedAnswer(
-            answer=answer_text.strip(),
+            answer=self._strip_reasoning(answer_text.strip()),
             sources=sources,
             trace=result.trace.to_dict(),
         )
@@ -111,7 +128,7 @@ class AnswerComposer:
         prompt = self._build_hybrid_prompt(
             question, structured_context, semantic_context
         )
-        answer_text = await self._llm.complete(prompt, max_tokens=1500)
+        answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
         seen: set[str] = set()
         sources: list[SourceReference] = []
@@ -143,7 +160,7 @@ class AnswerComposer:
 
         result.trace.add_step("Generated hybrid answer via LLM")
         return ComposedAnswer(
-            answer=answer_text.strip(),
+            answer=self._strip_reasoning(answer_text.strip()),
             sources=sources,
             trace=result.trace.to_dict(),
         )

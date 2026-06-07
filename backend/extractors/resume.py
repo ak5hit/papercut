@@ -172,7 +172,7 @@ class ResumeExtractor(Extractor):
         prompt = RESUME_EXTRACTION_PROMPT.format(text=text)
 
         try:
-            response = await self.llm_provider.complete(prompt, max_tokens=8000)
+            response = await self.llm_provider.complete(prompt, max_tokens=2000)
             data = json.loads(response)
             fields = {
                 "name": data.get("name"),

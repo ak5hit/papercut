@@ -94,6 +94,17 @@ export function UploadDropzone({
         </div>
       ) : (
         <div className="border rounded-lg p-4 bg-white shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <FileText className="h-8 w-8 text-blue-500 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-gray-900 truncate">
+                {selectedFile.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
+              </p>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Document Type
@@ -110,17 +121,6 @@ export function UploadDropzone({
                 </option>
               ))}
             </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <FileText className="h-8 w-8 text-blue-500 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-gray-900 truncate">
-                {selectedFile.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
-              </p>
-            </div>
           </div>
           <div className="mt-3 flex gap-2">
             <button

@@ -9,7 +9,7 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str,
         model: str = "gpt-4o-mini",
         base_url: str = "https://api.openai.com/v1",
-        timeout: float = 120.0,
+        timeout: float = 60.0,
     ) -> None:
         self.api_key = api_key
         self.model = model
