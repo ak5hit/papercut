@@ -72,8 +72,9 @@ class QueryClassifier:
         '{{"category": "SEMANTIC", "document_type": null, '
         '"field_filters": null, "entity_name": null}}\n'
         "\n"
-        "IMPORTANT: Output ONLY the raw JSON object. Do NOT wrap it in "
-        "```json fences. Do NOT add any text before or after the JSON.\n"
+        "CRITICAL: Your entire response must be ONLY a valid JSON object. "
+        "Start directly with {{ and end with }}. "
+        "No reasoning, no explanation, no markdown, no other text.\n"
         "\n"
         "QUESTION: {question}\n"
     )
@@ -86,13 +87,23 @@ class QueryClassifier:
         response = await self._llm.complete(prompt, max_tokens=300)
         try:
             data = json.loads(response)
-            return ClassificationResult(
-                category=data.get("category", "SEMANTIC"),
-                document_type=data.get("document_type"),
-                field_filters=data.get("field_filters"),
-                entity_name=data.get("entity_name"),
-            )
         except json.JSONDecodeError:
-            print(f"\n[CLASSIFIER] JSON parse failed for: {question!r}")
-            print(f"[CLASSIFIER] Raw LLM response: {response!r}\n")
-            return ClassificationResult()
+            start = response.find("{")
+            end = response.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(response[start:end + 1])
+                except json.JSONDecodeError:
+                    print(f"\n[CLASSIFIER] JSON extraction failed for: {question!r}")
+                    print(f"[CLASSIFIER] Raw LLM response: {response!r}\n")
+                    return ClassificationResult()
+            else:
+                print(f"\n[CLASSIFIER] No JSON found in response for: {question!r}")
+                print(f"[CLASSIFIER] Raw LLM response: {response!r}\n")
+                return ClassificationResult()
+        return ClassificationResult(
+            category=data.get("category", "SEMANTIC"),
+            document_type=data.get("document_type"),
+            field_filters=data.get("field_filters"),
+            entity_name=data.get("entity_name"),
+        )
