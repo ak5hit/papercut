@@ -91,16 +91,19 @@ class AnswerComposer:
         prompt = self._build_semantic_prompt(question, context)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
-        sources = [
-            SourceReference(
-                document_id=chunk["document_id"],
-                document_name=chunk.get("metadata", {}).get("filename", "Unknown"),
-                chunk_index=chunk["chunk_index"],
-                page=chunk.get("metadata", {}).get("page"),
-                excerpt=chunk["text"][:300],
-            )
-            for chunk in chunks
-        ]
+        seen: set[str] = set()
+        sources: list[SourceReference] = []
+        for chunk in chunks:
+            doc_id = chunk["document_id"]
+            if doc_id not in seen:
+                seen.add(doc_id)
+                sources.append(
+                    SourceReference(
+                        document_id=doc_id,
+                        document_name=chunk.get("metadata", {}).get("filename", "Unknown"),
+                        excerpt=chunk["text"][:300],
+                    )
+                )
 
         result.trace.add_step("Generated semantic answer via LLM")
         return ComposedAnswer(
@@ -145,15 +148,13 @@ class AnswerComposer:
                 )
 
         for chunk in chunks:
-            chunk_doc_id = chunk["document_id"]
-            if chunk_doc_id not in seen:
-                seen.add(chunk_doc_id)
+            doc_id = chunk["document_id"]
+            if doc_id not in seen:
+                seen.add(doc_id)
                 sources.append(
                     SourceReference(
-                        document_id=chunk_doc_id,
+                        document_id=doc_id,
                         document_name=chunk.get("metadata", {}).get("filename", "Unknown"),
-                        chunk_index=chunk["chunk_index"],
-                        page=chunk.get("metadata", {}).get("page"),
                         excerpt=chunk["text"][:300],
                     )
                 )

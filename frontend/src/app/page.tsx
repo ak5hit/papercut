@@ -170,7 +170,7 @@ export default function HomePage() {
               </p>
 
               <p className="text-xs text-blue-600 italic pt-2 border-t border-blue-200">
-                Using cost-effective models (deepseek-v4-flash) for this demo.
+                Using cost-effective models for this demo.
                 Production deployments would use higher-capacity models for faster, more accurate results.
               </p>
             </section>

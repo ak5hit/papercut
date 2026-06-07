@@ -182,8 +182,7 @@ class TestAnswerComposerSemantic:
         assert answer.answer == "The answer is 42."
         assert len(answer.sources) == 1
         assert answer.sources[0].document_id == "doc-1"
-        assert answer.sources[0].chunk_index == 3
-        assert answer.sources[0].page == 7
+        assert answer.sources[0].document_name == "contract.pdf"
         assert "forty-two" in answer.sources[0].excerpt
 
     @pytest.mark.asyncio

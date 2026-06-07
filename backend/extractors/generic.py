@@ -87,7 +87,7 @@ class GenericExtractor(Extractor):
             extraction_strategy=strategy,
         )
 
-        chunks = self._create_chunks(pages, doc.id, is_small)
+        chunks = self._create_chunks(pages, doc.id, is_small, document.filename)
 
         if is_small:
             doc.structured_fields = self._build_structured_fields(text, page_metadata, chunks)
@@ -228,6 +228,7 @@ class GenericExtractor(Extractor):
         pages: list[str],
         document_id: UUID,
         is_small: bool,
+        filename: str,
     ) -> list[DocumentChunk]:
         chunk_size = 1000 if is_small else 500
         chunk_overlap = 100 if is_small else 50
@@ -252,7 +253,7 @@ class GenericExtractor(Extractor):
                         document_id=document_id,
                         chunk_index=chunk_index,
                         text=chunk,
-                        metadata={"page": page_num, "source": "generic_extractor"},
+                        metadata={"page": page_num, "source": "generic_extractor", "filename": filename},
                         created_at=now,
                     )
                 )

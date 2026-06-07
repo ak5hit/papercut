@@ -96,7 +96,7 @@ class ResumeExtractor(Extractor):
         doc.structured_fields = self._merge_fields(deterministic_fields, semantic_fields)
         doc.entities = self._build_entities(doc.structured_fields)
 
-        chunks = self._create_chunks(pages, doc.id)
+        chunks = self._create_chunks(pages, doc.id, document.filename)
         trace.add_step(f"Created {len(chunks)} chunks", "1000 chars, 100 overlap")
 
         await self.document_store.save_document(doc)
@@ -291,6 +291,7 @@ class ResumeExtractor(Extractor):
         self,
         pages: list[str],
         document_id: UUID,
+        filename: str,
     ) -> list[DocumentChunk]:
         chunk_size = 1000
         chunk_overlap = 100
@@ -315,7 +316,7 @@ class ResumeExtractor(Extractor):
                         document_id=document_id,
                         chunk_index=chunk_index,
                         text=chunk,
-                        metadata={"page": page_num, "source": "resume_extractor"},
+                        metadata={"page": page_num, "source": "resume_extractor", "filename": filename},
                         created_at=now,
                     )
                 )
