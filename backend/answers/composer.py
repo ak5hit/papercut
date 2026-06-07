@@ -13,6 +13,10 @@ class AnswerComposer:
     @staticmethod
     def _strip_reasoning(answer: str) -> str:
         import re
+        reasoning_pattern = r'^(?:\d+\.\s+\*\*[^*]+\*\*[\s\S]*?\n\n)+'
+        match = re.match(reasoning_pattern, answer)
+        if match:
+            return answer[match.end():]
         prefixes = [
             r"^We are asked:[\s\S]*?\n\n",
             r"^Let me [\s\S]*?\n\n",
@@ -40,28 +44,33 @@ class AnswerComposer:
         docs = result.documents
         if not docs:
             answer = "No matching documents found."
-        elif len(docs) == 1:
-            doc = docs[0]
-            fields = doc.get("structured_fields", {})
-            prompt = (
-                f"Answer this question using the structured fields below.\n"
-                f"If the question asks for a specific field (phone, email, name), "
-                f"return ONLY that value — no extra text.\n"
-                f"If asked to show the full resume or all details, "
-                f"format all fields clearly with labels.\n"
-                f"If the structured data contains list/array fields, "
-                f"include ALL items from those lists as bullet points. "
-                f"Do not summarize or skip items — present every entry "
-                f"unless the user explicitly asks for a subset "
-                f"(e.g., 'top 2', 'the last 3', 'oldest').\n"
-                f"If the field is not found, say so briefly.\n\n"
-                f"FIELDS:\n{json.dumps(fields, indent=2)}\n\n"
-                f"QUESTION: {question}"
-            )
-            answer = await self._llm.complete(prompt, max_tokens=500)
         else:
-            lines = [f"- **{doc.get('metadata', {}).get('filename', doc['id'])}**" for doc in docs]
-            answer = f"Found {len(docs)} matching documents:\n" + "\n".join(lines)
+            all_fields = []
+            for doc in docs:
+                fields = doc.get("structured_fields", {})
+                if fields:
+                    filename = doc.get("metadata", {}).get("filename", "Unknown")
+                    all_fields.append({"document": filename, "fields": fields})
+
+            if not all_fields:
+                answer = "No structured data found in matching documents."
+            else:
+                prompt = (
+                    f"Answer this question using the structured fields below.\n"
+                    f"If the question asks for a specific field (phone, email, name), "
+                    f"return ONLY that value — no extra text.\n"
+                    f"If asked to show the full resume or all details, "
+                    f"format all fields clearly with labels.\n"
+                    f"If the structured data contains list/array fields, "
+                    f"include ALL items from those lists as bullet points. "
+                    f"Do not summarize or skip items — present every entry "
+                    f"unless the user explicitly asks for a subset "
+                    f"(e.g., 'top 2', 'the last 3', 'oldest').\n"
+                    f"If the field is not found, say so briefly.\n\n"
+                    f"STRUCTURED DATA:\n{json.dumps(all_fields, indent=2)}\n\n"
+                    f"QUESTION: {question}"
+                )
+                answer = await self._llm.complete(prompt, max_tokens=500)
 
         sources = [
             SourceReference(

@@ -58,18 +58,21 @@ class TestAnswerComposerStructured:
     @pytest.mark.asyncio
     async def test_compose_structured_multiple_documents(self) -> None:
         llm = AsyncMock()
+        llm.complete.return_value = "  The answer is 42.  "
         composer = AnswerComposer(llm)
         result = QueryResult(
             trace=ExecutionTrace(strategy="structured"),
             documents=[
                 {"id": "d1", "metadata": {"filename": "a.pdf"}, "structured_fields": {}, "entities": [], "extraction_strategy": ""},
-                {"id": "d2", "metadata": {"filename": "b.pdf"}, "structured_fields": {}, "entities": [], "extraction_strategy": ""},
+                {"id": "d2", "metadata": {"filename": "b.pdf"}, "structured_fields": {"email": "test@example.com"}, "entities": [], "extraction_strategy": ""},
             ],
         )
-        answer = await composer._compose_structured("List them", result)
-        assert "Found 2 matching documents" in answer.answer
+        answer = await composer._compose_structured("What is the email?", result)
+        assert answer.answer == "The answer is 42."
         assert len(answer.sources) == 2
-        llm.complete.assert_not_called()
+        prompt = llm.complete.call_args[0][0]
+        assert "email" in prompt
+        assert "test@example.com" in prompt
 
     @pytest.mark.asyncio
     async def test_compose_structured_empty(self) -> None:
