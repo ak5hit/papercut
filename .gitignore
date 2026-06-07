@@ -16,3 +16,4 @@ build/
 .ruff_cache/
 *.pdf
 !Akshit_Bansal_Resume.pdf
+!sql-db-that-scales.pdf
