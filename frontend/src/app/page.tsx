@@ -137,9 +137,10 @@ export default function HomePage() {
                   <span className="ml-auto text-blue-600 group-open:rotate-90 transition-transform">▶</span>
                 </summary>
                 <ul className="text-sm text-blue-800 mt-2 ml-6 space-y-1 list-disc list-inside">
-                  <li><strong>"What is the email address?"</strong> — structured lookup</li>
-                  <li><strong>"Summarize the work experience"</strong> — semantic search</li>
-                  <li><strong>"What did this person do at CRED?"</strong> — hybrid (filter + semantic)</li>
+                  <li><strong>"What is &lt;name&gt;'s email address?"</strong> — structured lookup</li>
+                  <li><strong>"Summarize &lt;name&gt;'s work experience"</strong> — semantic search</li>
+                  <li><strong>"What did &lt;name&gt; do at CRED?"</strong> — hybrid (filter + semantic)</li>
+                  <li><strong>"How is this SQL DB so scalable?"</strong> — semantic search across document excerpts</li>
                 </ul>
               </details>
 
@@ -170,7 +171,7 @@ export default function HomePage() {
               </p>
 
               <p className="text-xs text-blue-600 italic pt-2 border-t border-blue-200">
-                Using cost-effective models for this demo.
+                Using cost-effective models(deepseek-v4-pro) for this demo.
                 Production deployments would use higher-capacity models for faster, more accurate results.
               </p>
             </section>
