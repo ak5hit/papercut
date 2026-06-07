@@ -14,4 +14,6 @@ build/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
-A Distributed SQL Database That Scales.pdf
+*.pdf
+!Akshit_Bansal_Resume.pdf
+!Engineering_Project_Round_Zamp.pdf
