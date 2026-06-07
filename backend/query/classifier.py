@@ -72,6 +72,9 @@ class QueryClassifier:
         '{{"category": "SEMANTIC", "document_type": null, '
         '"field_filters": null, "entity_name": null}}\n'
         "\n"
+        "IMPORTANT: Output ONLY the raw JSON object. Do NOT wrap it in "
+        "```json fences. Do NOT add any text before or after the JSON.\n"
+        "\n"
         "QUESTION: {question}\n"
     )
 
@@ -90,4 +93,6 @@ class QueryClassifier:
                 entity_name=data.get("entity_name"),
             )
         except json.JSONDecodeError:
+            print(f"\n[CLASSIFIER] JSON parse failed for: {question!r}")
+            print(f"[CLASSIFIER] Raw LLM response: {response!r}\n")
             return ClassificationResult()
