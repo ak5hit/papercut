@@ -23,6 +23,7 @@ class SemanticRetriever:
                 "chunk_index": r.chunk.chunk_index,
                 "text": r.chunk.text,
                 "score": r.score,
+                "filename": r.filename,
                 "metadata": r.chunk.metadata,
             }
             for r in results

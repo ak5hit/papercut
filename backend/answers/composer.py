@@ -100,7 +100,7 @@ class AnswerComposer:
                 sources.append(
                     SourceReference(
                         document_id=doc_id,
-                        document_name=chunk.get("metadata", {}).get("filename", "Unknown"),
+                        document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
                         excerpt=chunk["text"][:300],
                     )
                 )
@@ -154,7 +154,7 @@ class AnswerComposer:
                 sources.append(
                     SourceReference(
                         document_id=doc_id,
-                        document_name=chunk.get("metadata", {}).get("filename", "Unknown"),
+                        document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
                         excerpt=chunk["text"][:300],
                     )
                 )

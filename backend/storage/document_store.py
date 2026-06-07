@@ -15,6 +15,7 @@ from models.document_chunk import DocumentChunk
 class ChunkSearchResult:
     chunk: DocumentChunk
     score: float
+    filename: str
 
 
 class DocumentStore:
@@ -98,8 +99,10 @@ class DocumentStore:
         result = await self.session.execute(
             select(
                 DocumentChunkModel,
+                DocumentModel.metadata_["filename"].astext.label("doc_filename"),
                 DocumentChunkModel.embedding.cosine_distance(query_embedding).label("distance"),
             )
+            .join(DocumentModel, DocumentChunkModel.document_id == DocumentModel.id)
             .where(DocumentChunkModel.embedding.is_not(None))
             .order_by("distance")
             .limit(limit)
@@ -109,6 +112,7 @@ class DocumentStore:
             ChunkSearchResult(
                 chunk=model.to_model(),
                 score=round(1.0 - distance, 4),
+                filename=doc_filename or "Unknown",
             )
-            for model, distance in rows
+            for model, doc_filename, distance in rows
         ]
