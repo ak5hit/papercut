@@ -89,8 +89,9 @@ export default function HomePage() {
             <span className="ml-auto text-blue-600 group-open:rotate-90 transition-transform">▶</span>
           </summary>
           <p className="text-sm text-blue-800 mt-2 ml-6">
-            Add new document types (CSV, DOCX, XML) by creating one extractor class.
-            The plugin architecture means no other pipeline changes are needed.
+            Adding a new extractor is straightforward — invoice, contract, receipt, CSV, DOCX, XML.
+            Create one extractor class implementing the interface, register it, and the pipeline
+            runs unchanged. The registry selects the highest-scoring extractor for each document.
           </p>
         </details>
 
