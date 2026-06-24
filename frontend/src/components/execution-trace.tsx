@@ -1,49 +1,73 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, ListChecks } from "lucide-react";
-import type { ExecutionTrace as ExecutionTraceType } from "@/lib/types";
+import { ChevronDown, ListChecks } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface ExecutionTraceProps {
-  trace: ExecutionTraceType;
+  trace: {
+    strategy: string;
+    steps: string[];
+    structured_results_count: number;
+    semantic_results_count: number;
+    graph_results_count: number;
+  };
 }
 
 export function ExecutionTrace({ trace }: ExecutionTraceProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-gray-50 border rounded-lg">
-      <button
+    <Card>
+      <Button
+        variant="ghost"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-3 text-left"
+        className="w-full justify-between p-3 h-auto"
       >
-        <span className="font-medium text-sm text-gray-700 flex items-center gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium">
           <ListChecks className="h-4 w-4" />
-          Execution Trace — {trace.strategy}
+          Execution Trace &mdash; {trace.strategy}
         </span>
-        {expanded ? (
-          <ChevronUp className="h-4 w-4 text-gray-400" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-gray-400" />
-        )}
-      </button>
-
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${
+            expanded ? "rotate-180" : ""
+          }`}
+        />
+      </Button>
       {expanded && (
-        <div className="px-3 pb-3">
+        <CardContent className="pt-0">
           <ul className="space-y-1">
             {trace.steps.map((step, i) => (
-              <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                <span className="text-green-600 mt-0.5">✓</span>
+              <li
+                key={i}
+                className="text-sm text-muted-foreground flex items-start gap-2"
+              >
+                <span className="text-green-500 mt-0.5">&#10003;</span>
                 {step}
               </li>
             ))}
           </ul>
-          <div className="mt-2 text-xs text-gray-500 flex gap-4">
-            <span>Structured: {trace.structured_results_count}</span>
-            <span>Semantic: {trace.semantic_results_count}</span>
+          <div className="mt-3 flex gap-2">
+            {trace.structured_results_count > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                Structured: {trace.structured_results_count}
+              </Badge>
+            )}
+            {trace.semantic_results_count > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                Semantic: {trace.semantic_results_count}
+              </Badge>
+            )}
+            {trace.graph_results_count > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                Graph: {trace.graph_results_count}
+              </Badge>
+            )}
           </div>
-        </div>
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }

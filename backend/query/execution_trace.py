@@ -8,6 +8,7 @@ class ExecutionTrace:
     steps: list[str] = field(default_factory=list)
     structured_results_count: int = 0
     semantic_results_count: int = 0
+    graph_results_count: int = 0
 
     def add_step(self, description: str) -> None:
         self.steps.append(description)
@@ -18,4 +19,5 @@ class ExecutionTrace:
             "steps": self.steps,
             "structured_results_count": self.structured_results_count,
             "semantic_results_count": self.semantic_results_count,
+            "graph_results_count": self.graph_results_count,
         }

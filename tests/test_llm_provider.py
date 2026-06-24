@@ -56,19 +56,39 @@ class TestOpenAIProvider:
         assert call_kwargs["json"]["model"] == "gpt-4o-mini"
         assert call_kwargs["json"]["temperature"] == 0.0
         assert call_kwargs["json"]["max_tokens"] == 500
+        assert call_kwargs["json"]["thinking"] == {"type": "disabled"}
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_reasoning_content(self) -> None:
+    async def test_thinking_disabled_via_parameter(self) -> None:
+        """Verify that thinking: {type: disabled} is sent in the request body."""
+        mock_response = Response(
+            status_code=200,
+            json={
+                "choices": [{"message": {"content": "test"}}],
+            },
+            request=Request("POST", "https://api.openai.com/v1/chat/completions"),
+        )
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            provider = OpenAICompatibleProvider(api_key="test-key")
+            await provider.complete("test prompt")
+
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["json"]["thinking"] == {"type": "disabled"}
+
+    @pytest.mark.asyncio
+    async def test_reasoning_content_not_fallback(self) -> None:
+        """Reasoning content is NOT extracted when content is empty.
+        reasoning_effort: none prevents the model from emitting it, so
+        there is no fallback."""
         mock_response = Response(
             status_code=200,
             json={
                 "choices": [{
                     "message": {
-                        "content": "",
-                        "reasoning_content": (
-                            "Let me analyze this...\n"
-                            '{"name": "John", "skills": ["Python"]}'
-                        ),
+                        "content": None,
+                        "reasoning_content": "Some thinking text.",
                     },
                 }],
             },
@@ -80,30 +100,7 @@ class TestOpenAIProvider:
             provider = OpenAICompatibleProvider(api_key="test-key")
             result = await provider.complete("extract", max_tokens=500)
 
-        assert "John" in result
-        assert "Python" in result
-
-    @pytest.mark.asyncio
-    async def test_reasoning_content_no_json_uses_raw(self) -> None:
-        mock_response = Response(
-            status_code=200,
-            json={
-                "choices": [{
-                    "message": {
-                        "content": "",
-                        "reasoning_content": "No JSON here, just plain reasoning text.",
-                    },
-                }],
-            },
-            request=Request("POST", "https://api.openai.com/v1/chat/completions"),
-        )
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            provider = OpenAICompatibleProvider(api_key="test-key")
-            result = await provider.complete("extract", max_tokens=500)
-
-        assert result == "No JSON here, just plain reasoning text."
+        assert result == ""
 
 
 class TestOllamaProvider:

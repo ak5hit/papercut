@@ -30,6 +30,14 @@ class DocumentModel(Base):
     embedding_status: Mapped[Literal["pending", "completed", "failed"]] = mapped_column(
         String(20), nullable=False, server_default="pending"
     )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="completed")
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    token_usage: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    total_chunks: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    processed_chunk: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    rel_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -80,8 +88,13 @@ class DocumentChunkModel(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
-    embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # DEPRECATED: unused, kept for compat
+    embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    length: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    content_offset: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     document: Mapped[DocumentModel] = relationship("DocumentModel", back_populates="chunks")
@@ -97,6 +110,11 @@ class DocumentChunkModel(Base):
             metadata=self.metadata_,
             embedding_id=self.embedding_id,
             embedding=self.embedding,
+            content_hash=self.content_hash,
+            position=self.position,
+            length=self.length,
+            content_offset=self.content_offset,
+            page_number=self.page_number,
             created_at=self.created_at,
         )
 
@@ -110,5 +128,10 @@ class DocumentChunkModel(Base):
             metadata_=chunk.metadata,
             embedding_id=chunk.embedding_id,
             embedding=chunk.embedding,
+            content_hash=chunk.content_hash,
+            position=chunk.position,
+            length=chunk.length,
+            content_offset=chunk.content_offset,
+            page_number=chunk.page_number,
             created_at=chunk.created_at,
         )

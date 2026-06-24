@@ -38,8 +38,7 @@ async def test_generic_small_trace_steps(session):
 
     assert trace.extractor == "GenericExtractor"
     step_descriptions = [s["step"] for s in trace.steps]
-    assert any("small" in s.lower() for s in step_descriptions)
-    assert any("Extracted structured fields" in s for s in step_descriptions)
+    assert any("Saved document and chunks" in s for s in step_descriptions)
     assert any("Saved to database" in s for s in step_descriptions)
 
 
@@ -48,7 +47,7 @@ async def test_generic_small_trace_fields(session):
     store = DocumentStore(session)
     extractor = GenericExtractor(store, size_threshold=10_000_000)
 
-    with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Contact us at test@example.com"])):
+    with patch("extractors.generic.PdfReader", return_value=_mock_reader(["Some text content here."])):
         doc_input = DocumentInput(content=_create_blank_pdf(), filename="test.pdf")
         doc, trace = await extractor.extract(doc_input)
 
@@ -56,8 +55,6 @@ async def test_generic_small_trace_fields(session):
     assert fields.get("page_count") == 1
     assert fields.get("total_characters") > 0
     assert fields.get("total_chunks") > 0
-    assert "detected_emails" in fields
-    assert "test@example.com" in fields["detected_emails"]
 
 
 @pytest.mark.asyncio
@@ -70,8 +67,7 @@ async def test_generic_large_trace_steps(session):
         doc, trace = await extractor.extract(doc_input)
 
     step_descriptions = [s["step"] for s in trace.steps]
-    assert any("large" in s.lower() for s in step_descriptions)
-    assert any("Skipped structured field extraction" in s for s in step_descriptions)
+    assert any("Saved document and chunks" in s for s in step_descriptions)
 
 
 @pytest.mark.asyncio
@@ -87,8 +83,6 @@ async def test_generic_large_trace_fields(session):
     assert "page_count" in fields
     assert "total_characters" in fields
     assert "total_chunks" in fields
-    assert "detected_emails" not in fields
-    assert "detected_phone_numbers" not in fields
 
 
 @pytest.mark.asyncio

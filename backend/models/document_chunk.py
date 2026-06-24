@@ -13,4 +13,9 @@ class DocumentChunk(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     embedding_id: str | None = None
     embedding: list[float] | None = None
+    content_hash: str | None = None
+    position: int = 0
+    length: int = 0
+    content_offset: int = 0
+    page_number: int | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

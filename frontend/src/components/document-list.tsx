@@ -21,19 +21,21 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
           <div className="min-w-0 flex-1">
             <p className="font-medium truncate">{doc.filename}</p>
             <p className="text-xs text-gray-500">
-              {doc.page_count} pages · {doc.extraction_strategy}
-              {doc.document_type && ` · ${doc.document_type}`}
-              ·{" "}
+              {doc.page_count} pages ·{" "}
               <span
                 className={
                   doc.embedding_status === "completed"
-                    ? "text-green-600"
+                    ? "text-green-600 font-medium"
                     : doc.embedding_status === "failed"
-                    ? "text-red-600"
-                    : "text-yellow-600"
+                    ? "text-red-600 font-medium"
+                    : "text-yellow-600 font-medium"
                 }
               >
-                {doc.embedding_status}
+                {doc.embedding_status === "completed"
+                  ? "ready"
+                  : doc.embedding_status === "failed"
+                  ? "failed"
+                  : "processing"}
               </span>
             </p>
           </div>

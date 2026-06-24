@@ -15,17 +15,21 @@ class ClassificationResult:
 
 class QueryClassifier:
     _PROMPT = (
-        "Classify this query and extract any filters. Return ONLY valid JSON:\n"
+        "Classify this query. Return ONLY valid JSON:\n"
         "{{\n"
-        '  "category": "STRUCTURED" | "SEMANTIC" | "HYBRID",\n'
+        '  "category": "SEMANTIC" | "GRAPH" | "HYBRID",\n'
         '  "document_type": "resume" | null,\n'
         '  "field_filters": {{"key": "value"}} | null,\n'
         '  "entity_name": "org or person" | null\n'
         "}}\n"
         "\n"
         "CATEGORY RULES:\n"
-        "- STRUCTURED: Asking for a specific value from fields — email, phone, "
-        "skills, name, company, role, dates, counts. Answer is a lookup.\n"
+        "- GRAPH: Questions about entities, relationships, emails, phone numbers, "
+        "companies, skills, names, connections, 'who is connected to', "
+        "'what is the relationship between', 'list all X and their Y', "
+        "lookups for specific values (email, phone, url), "
+        "graph traversal, multi-hop queries. "
+        "Answer requires walking the knowledge graph.\n"
         "- SEMANTIC: Asking to explain, summarize, describe, or interpret "
         "WITHOUT targeting a specific entity. "
         "Answer requires natural language synthesis.\n"
@@ -44,18 +48,24 @@ class QueryClassifier:
         "Use null if the question does not explicitly contain a company name.\n"
         "\n"
         "EXAMPLES:\n"
-        '"What is Akshit email?" -> '
-        '{{"category": "STRUCTURED", "document_type": null, '
+        '"What is the email?" -> '
+        '{{"category": "GRAPH", "document_type": null, '
         '"field_filters": null, "entity_name": null}}\n'
         '"Show candidates with Python skills" -> '
-        '{{"category": "STRUCTURED", "document_type": "resume", '
-        '"field_filters": {{"skills": "Python"}}, "entity_name": null}}\n'
+        '{{"category": "GRAPH", "document_type": "resume", '
+        '"field_filters": null, "entity_name": null}}\n'
         '"Summarize the work experience" -> '
         '{{"category": "SEMANTIC", "document_type": null, '
         '"field_filters": null, "entity_name": null}}\n'
         '"What did this person do at CRED?" -> '
         '{{"category": "HYBRID", "document_type": null, '
         '"field_filters": null, "entity_name": "CRED"}}\n'
+        '"List all people and the organizations they are connected to" -> '
+        '{{"category": "GRAPH", "document_type": null, '
+        '"field_filters": null, "entity_name": null}}\n'
+        '"What is the relationship between Akshit and CRED?" -> '
+        '{{"category": "GRAPH", "document_type": null, '
+        '"field_filters": null, "entity_name": null}}\n'
         "\n"
         "CRITICAL: Your entire response must be ONLY a valid JSON object. "
         "Start directly with {{ and end with }}. "
@@ -70,7 +80,10 @@ class QueryClassifier:
     async def classify(self, question: str) -> ClassificationResult:
         lower = question.lower()
         if any(kw in lower for kw in ["email", "phone", "linkedin", "url", "github", "twitter"]):
-            return ClassificationResult(category="STRUCTURED")
+            return ClassificationResult(category="GRAPH")
+        graph_kw = ["relationship", "connected to", "graph of", "list all people", "list all organizations"]
+        if any(kw in lower for kw in graph_kw):
+            return ClassificationResult(category="GRAPH")
 
         prompt = self._PROMPT.format(question=question)
         response = await self._llm.complete(prompt, max_tokens=500)

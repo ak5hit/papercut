@@ -1,10 +1,13 @@
+import asyncio
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
-from config import settings
+from api.sse import sse_event
+from config import settings as app_settings
 from embeddings import create_embedding_provider
 from extractors import DocumentInput, create_default_registry
 from llm import create_llm_provider
@@ -22,46 +25,96 @@ def _require_ready(request: Request) -> None:
         )
 
 
-@router.post("/upload", status_code=201)
+@router.post("/upload")
 async def upload_document(
     file: UploadFile,
-    document_type: str | None = Form(None),
-    session: AsyncSession = Depends(get_session),
+    request: Request,
     _ready: None = Depends(_require_ready),
-) -> dict[str, Any]:
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+) -> StreamingResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     content = await file.read()
-    store = DocumentStore(session)
 
-    llm_provider = None
-    if settings.openai_api_key or settings.llm_provider == "ollama":
-        llm_provider = create_llm_provider(settings)
+    queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
-    embedding_provider = create_embedding_provider(settings)
+    async def on_phase(phase_key: str, label: str) -> None:
+        await queue.put((phase_key, label))
 
-    registry = create_default_registry(store, llm_provider, embedding_provider)
-    document_input = DocumentInput(
-        content=content,
-        filename=file.filename,
-        content_type=file.content_type,
-        document_type=document_type,
+    async def run_extraction() -> tuple[Any, Any]:
+        from storage.database import async_session_factory
+
+        async with async_session_factory() as session:
+            llm_provider = None
+            if app_settings.openai_api_key or app_settings.llm_provider == "ollama":
+                llm_provider = create_llm_provider(app_settings)
+
+            embedding_provider = create_embedding_provider(app_settings)
+            store = DocumentStore(session)
+            registry = create_default_registry(store, llm_provider, embedding_provider, settings=app_settings)
+            document_input = DocumentInput(
+                content=content,
+                filename=file.filename or "document.pdf",
+                content_type=file.content_type,
+            )
+            doc, trace = await registry.process(document_input, on_phase=on_phase)
+            return doc, trace
+
+    extract_task = asyncio.create_task(run_extraction())
+
+    async def event_stream() -> Any:
+        nonlocal extract_task
+        doc = None
+        trace = None
+
+        while True:
+            get_queue = asyncio.create_task(queue.get())
+            done, _ = await asyncio.wait(
+                [get_queue, extract_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                if task is get_queue:
+                    phase_key, label = task.result()
+                    yield sse_event("phase", {"phase": phase_key, "label": label})
+                    break
+
+            if extract_task.done():
+                # Drain any remaining events from the queue
+                while not queue.empty():
+                    try:
+                        phase_key, label = queue.get_nowait()
+                        yield sse_event("phase", {"phase": phase_key, "label": label})
+                    except asyncio.QueueEmpty:
+                        break
+                break
+
+        try:
+            doc, trace = extract_task.result()
+        except Exception as exc:
+            yield sse_event("error", {"message": str(exc)})
+            return
+
+        yield sse_event("done", {
+            "id": str(doc.id),
+            "filename": doc.metadata.get("filename"),
+            "page_count": doc.metadata.get("page_count"),
+            "embedding_status": doc.embedding_status,
+            "pipeline_trace": trace.to_dict(),
+            "created_at": doc.created_at.isoformat(),
+        })
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
-    document, pipeline_trace = await registry.process(document_input)
-
-    return {
-        "id": str(document.id),
-        "filename": document.metadata.get("filename"),
-        "page_count": document.metadata.get("page_count"),
-        "extraction_strategy": document.extraction_strategy,
-        "embedding_status": document.embedding_status,
-        "entities_count": len(document.entities),
-        "relationships_count": len(document.relationships),
-        "document_type": document.structured_fields.get("document_type"),
-        "pipeline_trace": pipeline_trace.to_dict(),
-        "created_at": document.created_at.isoformat(),
-    }
 
 
 @router.get("/")
@@ -77,7 +130,6 @@ async def list_documents(
             "id": str(doc.id),
             "filename": doc.metadata.get("filename"),
             "page_count": doc.metadata.get("page_count"),
-            "extraction_strategy": doc.extraction_strategy,
             "embedding_status": doc.embedding_status,
             "created_at": doc.created_at.isoformat(),
         }
@@ -111,6 +163,17 @@ async def delete_document(
     document_id: UUID,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    if app_settings.graph_extraction_enabled:
+        try:
+            from graph.age_connection import create_age_graph
+            from graph.store import GraphStore
+            age_graph = create_age_graph(app_settings)
+            graph_store = GraphStore(age_graph, app_settings)
+            await graph_store.delete_document(document_id)
+        except Exception:
+            import logging
+            logging.warning("AGE cleanup failed for document %s", document_id)
+
     store = DocumentStore(session)
     deleted = await store.delete_document(document_id)
     if not deleted:
@@ -146,7 +209,7 @@ async def semantic_search(
     limit: int = 5,
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    provider = create_embedding_provider(settings)
+    provider = create_embedding_provider(app_settings)
     query_embedding = provider.embed([query])[0]
 
     store = DocumentStore(session)

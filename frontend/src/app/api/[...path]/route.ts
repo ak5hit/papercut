@@ -37,6 +37,16 @@ async function proxy(request: NextRequest, method: string) {
     }
   });
 
+  const isStream = responseHeaders.get("content-type")?.includes("text/event-stream");
+
+  if (isStream) {
+    return new NextResponse(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  }
+
   const data = await response.arrayBuffer();
 
   return new NextResponse(data, {

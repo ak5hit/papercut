@@ -1,183 +1,133 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload, MessageCircle } from "lucide-react";
+import { toast } from "sonner";
+
+import { AppSidebar } from "@/components/app-sidebar";
+import { SiteHeader } from "@/components/site-header";
 import { UploadDropzone } from "@/components/upload-dropzone";
-import { UploadPipeline } from "@/components/upload-pipeline";
-import { DocumentList } from "@/components/document-list";
-import { QueryInterface } from "@/components/query-interface";
-import { AnswerDisplay } from "@/components/answer-display";
+import { UploadProgress } from "@/components/upload-progress";
+import { ChatView } from "@/components/chat-view";
+import { GraphModal } from "@/components/graph-modal";
+
 import { useDocuments } from "@/hooks/use-documents";
 import { useUpload } from "@/hooks/use-upload";
-import { useQuery } from "@/hooks/use-query";
+import { useChat } from "@/hooks/use-chat";
 import { useReadiness } from "@/hooks/use-readiness";
-import { Loader2, Info, BookOpen, Lightbulb, Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
 
 export default function HomePage() {
-  const { documents, loading: docsLoading, error: docsError, refresh, deleteDocument } = useDocuments();
-  const { upload, uploading, error: uploadError, lastUploaded, lastTrace } = useUpload();
-  const { ask, response, loading: queryLoading, error: queryError } = useQuery();
-  const [lastQuestion, setLastQuestion] = useState("");
-  const { isReady, loading: readinessLoading } = useReadiness();
+  const { documents, loading: docsLoading, refresh, deleteDocument } = useDocuments();
+  const { upload, uploading, error: uploadError, phases, docResult } = useUpload();
+  const { messages, loading: chatLoading, send: chatSend, clear: chatClear, error: chatError } = useChat();
+  const { isReady } = useReadiness();
 
-  // Refetch documents once backend becomes ready
+  const [activeTab, setActiveTab] = useState<"upload" | "chat">("chat");
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [graphModalDocId, setGraphModalDocId] = useState<string | null>(null);
+
   useEffect(() => {
-    if (isReady) {
-      refresh();
-    }
+    if (isReady) refresh();
   }, [isReady, refresh]);
 
-  const handleUpload = async (file: File, documentType: string) => {
-    await upload(file, documentType);
-    refresh();
+  const handleUpload = async (file: File) => {
+    try {
+      await upload(file);
+      toast.success("Document uploaded successfully");
+      refresh();
+    } catch {
+      toast.error("Upload failed");
+    }
   };
 
-  const handleAsk = async (question: string) => {
-    setLastQuestion(question);
-    await ask(question);
+  const handleSelectDoc = (id: string) => {
+    setSelectedDocId(id);
+    setGraphModalDocId(id);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDocument(id);
+      if (selectedDocId === id) setSelectedDocId(null);
+      if (graphModalDocId === id) setGraphModalDocId(null);
+      toast.success("Document deleted");
+    } catch {
+      toast.error("Failed to delete document");
+    }
   };
 
   return (
-    <main className="max-w-7xl mx-auto px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Document Intelligence Platform
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Upload documents. Ask questions. Get answers with evidence.
-        </p>
-      </header>
+    <SidebarProvider>
+      <AppSidebar
+        documents={documents}
+        loading={docsLoading}
+        isReady={isReady}
+        selectedDocId={selectedDocId}
+        onSelectDoc={handleSelectDoc}
+        onUploadClick={() => setActiveTab("upload")}
+        onDelete={handleDelete}
+      />
+      <SidebarInset>
+        <SiteHeader isReady={isReady} />
+        <main className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "upload" | "chat")}>
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="upload" className="gap-2">
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Upload</span>
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="gap-2">
+                <MessageCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Chat</span>
+              </TabsTrigger>
+            </TabsList>
 
-      <div className="flex flex-col lg:flex-row gap-8 mt-6">
-        <div className="flex-1 min-w-0 space-y-8">
-
-      {(!isReady || readinessLoading) && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
-          <Loader2 className="h-5 w-5 text-yellow-600 animate-spin shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-yellow-800">
-              Loading embedding model...
-            </p>
-            <p className="text-sm text-yellow-700 mt-0.5">
-              This may take 30–60 seconds on first run. Uploads will be enabled once ready.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <section className="space-y-2">
-        <h2 className="font-semibold text-gray-800">Upload Document</h2>
-        <UploadDropzone
-          onUpload={handleUpload}
-          uploading={uploading}
-          disabled={!isReady}
-        />
-        {uploadError && (
-          <p className="text-sm text-red-600">{uploadError}</p>
-        )}
-        {lastUploaded && (
-          <>
-            <p className="text-sm text-green-600 font-medium">
-              Uploaded: {lastUploaded.filename} ({lastUploaded.page_count} pages)
-            </p>
-            {lastTrace && <UploadPipeline trace={lastTrace} />}
-          </>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-semibold text-gray-800">Ask a Question</h2>
-        <QueryInterface onSubmit={handleAsk} loading={queryLoading} />
-        {queryError && (
-          <p className="text-sm text-red-600">{queryError}</p>
-        )}
-        {response && <AnswerDisplay question={lastQuestion} response={response} />}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-semibold text-gray-800">Documents</h2>
-        {docsLoading ? (
-          <p className="text-sm text-gray-500">Loading documents...</p>
-        ) : !isReady ? (
-          <p className="text-sm text-gray-500">System initializing, documents will load shortly...</p>
-        ) : docsError ? (
-          <p className="text-sm text-red-600">{docsError}</p>
-        ) : (
-          <DocumentList documents={documents} onDelete={deleteDocument} />
-        )}
-      </section>
-        </div>
-
-        <aside className="lg:w-80 shrink-0">
-          <div className="sticky top-8 space-y-4">
-            <section className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-start gap-2">
-                <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-blue-900">
-                  A universal document intelligence platform. Upload a PDF, ask questions in natural language, and get answers with source references, page numbers, and an execution trace.
-                </p>
+            <TabsContent value="upload" className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold mb-3">Upload Document</h2>
+                <UploadDropzone
+                  onUpload={handleUpload}
+                  uploading={uploading}
+                  disabled={!isReady}
+                />
+                {uploadError && (
+                  <p className="text-sm text-destructive mt-2">{uploadError}</p>
+                )}
+                {(uploading || docResult) && (
+                  <div className="mt-4">
+                    <UploadProgress
+                      phases={phases}
+                      totalDurationMs={(docResult as { pipeline_trace?: { total_duration_ms?: number } })?.pipeline_trace?.total_duration_ms}
+                    />
+                    {docResult && (
+                      <p className="text-sm text-green-600 dark:text-green-400 font-medium mt-3">
+                        Uploaded: {(docResult as { filename?: string }).filename} ({(docResult as { page_count?: number }).page_count} pages)
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
+            </TabsContent>
 
-              <details className="group">
-                <summary className="flex items-center gap-2 text-sm font-medium text-blue-900 cursor-pointer list-none">
-                  <BookOpen className="h-4 w-4" />
-                  <span>What does it support?</span>
-                  <span className="ml-auto text-blue-600 group-open:rotate-90 transition-transform">▶</span>
-                </summary>
-                <ul className="text-sm text-blue-800 mt-2 ml-6 space-y-1 list-disc list-inside">
-                  <li><strong>PDFs</strong> — text-based PDFs (not scanned images)</li>
-                  <li><strong>Resumes</strong> — specialized extraction with structured fields</li>
-                  <li><strong>Three query types</strong> — structured lookups, semantic search, or hybrid (structured filter + semantic)</li>
-                </ul>
-              </details>
+            <TabsContent value="chat" className="space-y-4">
+              <ChatView
+                messages={messages}
+                loading={chatLoading}
+                onSend={chatSend}
+                onOpenGraph={handleSelectDoc}
+              />
+            </TabsContent>
+          </Tabs>
+        </main>
+      </SidebarInset>
 
-              <details className="group">
-                <summary className="flex items-center gap-2 text-sm font-medium text-blue-900 cursor-pointer list-none">
-                  <Lightbulb className="h-4 w-4" />
-                  <span>Try asking...</span>
-                  <span className="ml-auto text-blue-600 group-open:rotate-90 transition-transform">▶</span>
-                </summary>
-                <ul className="text-sm text-blue-800 mt-2 ml-6 space-y-1 list-disc list-inside">
-                  <li><strong>"What is &lt;name&gt;'s email address?"</strong> — structured lookup</li>
-                  <li><strong>"Summarize &lt;name&gt;'s work experience"</strong> — semantic search</li>
-                  <li><strong>"What did &lt;name&gt; do at CRED?"</strong> — hybrid (filter + semantic)</li>
-                  <li><strong>"How is this SQL DB so scalable?"</strong> — semantic search across document excerpts</li>
-                </ul>
-              </details>
-
-              <details className="group">
-                <summary className="flex items-center gap-2 text-sm font-medium text-blue-900 cursor-pointer list-none">
-                  <Wrench className="h-4 w-4" />
-                  <span>What's extensible?</span>
-                  <span className="ml-auto text-blue-600 group-open:rotate-90 transition-transform">▶</span>
-                </summary>
-                <p className="text-sm text-blue-800 mt-2 ml-6">
-                  Adding a new extractor is straightforward — invoice, contract, receipt, CSV, DOCX, XML.
-                  Create one extractor class implementing the interface, register it, and the pipeline
-                  runs unchanged. The registry selects the highest-scoring extractor for each document.
-                </p>
-              </details>
-
-              <p className="text-xs text-blue-700 pt-2 border-t border-blue-200">
-                For architecture, tradeoffs, and implementation details, see the{' '}
-                <a
-                  href="https://github.com/ak5hit/papercut#readme"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-blue-900"
-                >
-                  README
-                </a>
-                .
-              </p>
-
-              <p className="text-xs text-blue-600 italic pt-2 border-t border-blue-200">
-                Using cost-effective models(deepseek-v4-pro) for this demo.
-                Production deployments would use higher-capacity models for faster, more accurate results.
-              </p>
-            </section>
-          </div>
-        </aside>
-      </div>
-    </main>
+      <GraphModal
+        documentId={graphModalDocId}
+        documentName={documents.find((d) => d.id === graphModalDocId)?.filename}
+        onClose={() => setGraphModalDocId(null)}
+      />
+    </SidebarProvider>
   );
 }

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from extractors.pipeline_trace import PipelineTrace
@@ -13,11 +14,18 @@ class DocumentInput:
     document_type: str | None = None
 
 
+OnPhaseCallback = Callable[[str, str], Awaitable[None]]
+
+
 class Extractor(ABC):
     @abstractmethod
     def supports(self, document: DocumentInput) -> float:
         ...
 
     @abstractmethod
-    async def extract(self, document: DocumentInput) -> tuple[CanonicalDocument, PipelineTrace]:
+    async def extract(
+        self,
+        document: DocumentInput,
+        on_phase: OnPhaseCallback | None = None,
+    ) -> tuple[CanonicalDocument, PipelineTrace]:
         ...

@@ -38,17 +38,6 @@ async def test_generic_extractor_small_document(session):
         document, _trace = await extractor.extract(doc_input)
 
     assert document.extraction_strategy == "generic_small"
-    assert "page_count" in document.structured_fields
-    assert "total_characters" in document.structured_fields
-    assert "total_chunks" in document.structured_fields
-    assert "avg_chunk_size" in document.structured_fields
-    assert document.structured_fields["page_count"] == 1
-    assert document.structured_fields["total_characters"] > 0
-    assert document.structured_fields["total_chunks"] > 0
-    assert "detected_emails" in document.structured_fields
-    assert "detected_phone_numbers" in document.structured_fields
-    assert document.entities == []
-    assert document.relationships == []
     assert document.metadata["filename"] == "test.pdf"
 
     retrieved = await store.get_document(document.id)
@@ -156,26 +145,5 @@ async def test_extractor_triggers_embedding_and_status(session):
     mock_embedder.embed.assert_called_once()
 
 
-def test_extract_emails():
-    extractor = GenericExtractor(MagicMock())
-    text = "Contact us at support@example.com or sales@company.co.in for help."
-    emails = extractor._extract_emails(text)
-    assert "support@example.com" in emails
-    assert "sales@company.co.in" in emails
-    assert len(emails) == 2
+# Email and phone extraction removed — graph handles contact info as nodes
 
-
-def test_extract_phone_numbers_indian_format():
-    extractor = GenericExtractor(MagicMock())
-    text = "Call +91 8872800037 or +918872800037 or 8872800037 or +91-88728-00037"
-    phones = extractor._extract_phone_numbers(text)
-    assert len(phones) >= 3
-    # All variants should be detected
-    assert any("+91" in p for p in phones)
-
-
-def test_extract_phone_numbers_no_false_positives():
-    extractor = GenericExtractor(MagicMock())
-    text = "The year 2024 has 12 months and page 123 is missing."
-    phones = extractor._extract_phone_numbers(text)
-    assert phones == []

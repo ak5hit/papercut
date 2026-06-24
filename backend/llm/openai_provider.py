@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncIterator
+
 import httpx
 
 from llm.base import LLMProvider
@@ -29,18 +34,49 @@ class OpenAICompatibleProvider(LLMProvider):
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": max_tokens,
                     "temperature": 0.0,
+                    "thinking": {"type": "disabled"},
                 },
             )
             response.raise_for_status()
             data = response.json()
             content: str = data["choices"][0]["message"].get("content") or ""
-            if not content:
-                reasoning = data["choices"][0]["message"].get("reasoning_content") or ""
-                if reasoning:
-                    import re
-
-                    match = re.search(r"\{[\s\S]*\}", reasoning)
-                    if match:
-                        return match.group(0)
-                    return reasoning
             return content
+
+    async def stream_complete(self, prompt: str, max_tokens: int = 2000) -> AsyncIterator[str]:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": 0.0,
+                    "thinking": {"type": "disabled"},
+                    "stream": True,
+                },
+            ) as response:
+                response.raise_for_status()
+                buffer = ""
+                async for chunk in response.aiter_bytes():
+                    buffer += chunk.decode("utf-8", errors="replace")
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        if line.startswith("data: "):
+                            raw = line[6:]
+                            if raw == "[DONE]":
+                                return
+                            try:
+                                evt = json.loads(raw)
+                                delta = evt.get("choices", [{}])[0].get("delta", {})
+                                content_text = delta.get("content")
+                                if content_text:
+                                    yield content_text
+                            except json.JSONDecodeError:
+                                pass

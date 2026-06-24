@@ -1,31 +1,39 @@
-import type { QueryResponse } from "@/lib/types";
+"use client";
+
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { MarkdownRenderer } from "./markdown-renderer";
 import { SourceReferences } from "./source-references";
 import { ExecutionTrace } from "./execution-trace";
+import type { QueryResponse } from "@/lib/types";
 
 interface AnswerDisplayProps {
   question: string;
   response: QueryResponse;
+  onOpenGraph?: (documentId: string) => void;
 }
 
-export function AnswerDisplay({ question, response }: AnswerDisplayProps) {
+export function AnswerDisplay({ question, response, onOpenGraph }: AnswerDisplayProps) {
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 border rounded-lg p-4">
-        <p className="text-sm text-gray-500 mb-1">Question</p>
-        <p className="font-medium text-gray-900">{question}</p>
-      </div>
-
-      <div className="bg-white border rounded-lg p-4 shadow-sm">
-        <h3 className="font-semibold text-gray-900 mb-2">Answer</h3>
-        <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap">
-          {response.answer}
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {response.trace.strategy}
+            </Badge>
+            <span className="text-xs text-muted-foreground">Question</span>
+          </div>
+          <p className="font-medium text-sm">{question}</p>
+        </CardHeader>
+        <CardContent>
+          <MarkdownRenderer content={response.answer} />
+        </CardContent>
+      </Card>
 
       {response.sources.length > 0 && (
-        <SourceReferences sources={response.sources} />
+        <SourceReferences sources={response.sources} onOpenGraph={onOpenGraph} />
       )}
-
       <ExecutionTrace trace={response.trace} />
     </div>
   );

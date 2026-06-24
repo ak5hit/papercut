@@ -1,6 +1,7 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    build:
+      context: ./db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -9,6 +10,24 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  age:
+    image: apache/age:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: doc_graph
+    ports:
+      - "5433:5432"
+    volumes:
+      - agedata:/var/lib/postgresql
+      - ./age/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -22,8 +41,12 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      AGE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@age:5432/doc_graph
     depends_on:
       db:
+        condition: service_healthy
+      age:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -38,3 +61,4 @@ services:
 
 volumes:
   pgdata:
+  agedata:
