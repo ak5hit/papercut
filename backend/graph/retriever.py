@@ -85,15 +85,32 @@ class GraphRetriever:
         result = await self.session.execute(sql)
         chunks: list[dict[str, Any]] = []
         chunk_ids: list[str] = []
+        doc_ids: set[str] = set()
         for row in result:
+            doc_id = str(row.document_id)
             chunks.append({
                 "id": str(row.id),
-                "document_id": str(row.document_id),
+                "document_id": doc_id,
                 "text": row.text,
                 "chunk_index": row.chunk_index,
                 "score": round(float(row.score), 4),
             })
             chunk_ids.append(str(row.id))
+            doc_ids.add(doc_id)
+
+        # Look up document filenames for the unique document IDs
+        if doc_ids:
+            placeholders = ",".join(f"'{did}'" for did in doc_ids)
+            doc_result = await self.session.execute(
+                text(
+                    f"SELECT id, metadata->>'filename' AS filename FROM documents WHERE id IN ({placeholders})"
+                )
+            )
+            filename_map: dict[str, str] = {
+                str(row.id): row.filename for row in doc_result
+            }
+            for chunk in chunks:
+                chunk["filename"] = filename_map.get(chunk["document_id"], "Unknown")
 
         if not chunk_ids:
             return {"context": "", "chunks": [], "entities": [], "relationships": []}

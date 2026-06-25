@@ -1,4 +1,4 @@
-import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 from answers.models import ComposedAnswer, SourceReference
@@ -34,55 +34,116 @@ class AnswerComposer:
     async def compose(self, question: str, result: QueryResult) -> ComposedAnswer:
         strategy = result.trace.strategy
 
-        if strategy == "structured":
-            return await self._compose_structured(question, result)
+        if strategy == "graph":
+            return await self._compose_graph(question, result)
         if strategy == "semantic":
             return await self._compose_semantic(question, result)
         return await self._compose_hybrid(question, result)
 
-    async def _compose_structured(self, question: str, result: QueryResult) -> ComposedAnswer:
-        docs = result.documents
-        if not docs:
-            answer = "No matching documents found."
-        else:
-            all_fields = []
-            for doc in docs:
-                fields = doc.get("structured_fields", {})
-                if fields:
-                    filename = doc.get("metadata", {}).get("filename", "Unknown")
-                    all_fields.append({"document": filename, "fields": fields})
+    async def compose_stream(
+        self, question: str, result: QueryResult
+    ) -> AsyncIterator[str]:
+        """Yield answer text tokens from the LLM. Trace/sources are already in result."""
+        strategy = result.trace.strategy
 
-            if not all_fields:
-                answer = "No structured data found in matching documents."
-            else:
-                prompt = (
-                    f"Answer this question using the structured fields below.\n"
-                    f"If the question asks for a specific field (phone, email, name), "
-                    f"return ONLY that value — no extra text.\n"
-                    f"If asked to show the full resume or all details, "
-                    f"format all fields clearly with labels.\n"
-                    f"If the structured data contains list/array fields, "
-                    f"include ALL items from those lists as bullet points. "
-                    f"Do not summarize or skip items — present every entry "
-                    f"unless the user explicitly asks for a subset "
-                    f"(e.g., 'top 2', 'the last 3', 'oldest').\n"
-                    f"If the field is not found, say so briefly.\n\n"
-                    f"STRUCTURED DATA:\n{json.dumps(all_fields, indent=2)}\n\n"
-                    f"QUESTION: {question}"
-                )
-                answer = await self._llm.complete(prompt, max_tokens=500)
-
-        sources = [
-            SourceReference(
-                document_id=doc["id"],
-                document_name=doc.get("metadata", {}).get("filename", "Unknown"),
+        if strategy == "graph":
+            if result.graph_result:
+                answer = result.graph_result.get("answer", "No answer generated")
+                yield answer.strip()
+                return
+            context = result.graph_context
+            chunks = result.chunks
+            if not context and not chunks:
+                yield "I could not find relevant data to answer this question."
+                return
+            prompt = self._build_semantic_prompt(
+                question, context or self._build_context(chunks)
             )
-            for doc in docs
-        ]
+            async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
+                yield chunk
+            return
 
-        result.trace.add_step("Formatted structured answer")
+        if strategy == "semantic":
+            chunks = result.chunks
+            if not chunks:
+                yield "I could not find relevant text in the documents."
+                return
+            context = result.graph_context or self._build_context(chunks)
+            prompt = self._build_semantic_prompt(question, context)
+            async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
+                yield chunk
+            return
+
+        if strategy == "hybrid":
+            docs = result.documents
+            chunks = result.chunks
+            structured_context = ""
+            if docs:
+                lines = []
+                for doc in docs[:10]:
+                    filename = doc.get("metadata", {}).get("filename", "Unknown")
+                    fields = doc.get("structured_fields", {})
+                    field_str = ", ".join(f"{k}={v}" for k, v in fields.items())
+                    lines.append(f"Document {filename}: {field_str}")
+                structured_context = "\n".join(lines)
+            semantic_context = result.graph_context or (
+                self._build_context(chunks) if chunks else ""
+            )
+            prompt = self._build_hybrid_prompt(
+                question, structured_context, semantic_context
+            )
+            async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
+                yield chunk
+            return
+
+    async def _compose_graph(self, question: str, result: QueryResult) -> ComposedAnswer:
+        # If Cypher result is available, use it
+        if result.graph_result:
+            answer = result.graph_result.get("answer", "No answer generated")
+            cypher = result.graph_result.get("cypher", "")
+            context = result.graph_result.get("context", [])
+
+            result.trace.add_step("Generated graph answer via Cypher")
+            result.trace.graph_results_count = len(context)
+
+            return ComposedAnswer(
+                answer=self._strip_reasoning(answer.strip()),
+                sources=[],
+                trace=result.trace.to_dict(),
+                generated_cypher=cypher,
+                cypher_context=context,
+            )
+
+        # Fallback: use graph-enriched context
+        context = result.graph_context
+        chunks = result.chunks
+
+        if not context and not chunks:
+            return ComposedAnswer(
+                answer="I could not find relevant data to answer this question.",
+                sources=[],
+                trace=result.trace.to_dict(),
+            )
+
+        prompt = self._build_semantic_prompt(question, context or self._build_context(chunks))
+        answer_text = await self._llm.complete(prompt, max_tokens=2000)
+
+        seen: set[str] = set()
+        sources: list[SourceReference] = []
+        for chunk in chunks or []:
+            doc_id = chunk.get("document_id") or chunk.get("id", "")
+            if str(doc_id) not in seen:
+                seen.add(str(doc_id))
+                sources.append(
+                    SourceReference(
+                        document_id=str(doc_id),
+                        document_name=chunk.get("filename", "Unknown"),
+                    )
+                )
+
+        result.trace.add_step("Generated graph answer via enriched context")
         return ComposedAnswer(
-            answer=self._strip_reasoning(answer.strip()),
+            answer=self._strip_reasoning(answer_text.strip()),
             sources=sources,
             trace=result.trace.to_dict(),
         )
@@ -96,7 +157,9 @@ class AnswerComposer:
                 trace=result.trace.to_dict(),
             )
 
-        context = self._build_context(chunks)
+        context = result.graph_context or self._build_context(chunks)
+        if result.graph_context:
+            result.trace.add_step("Using graph-enriched context")
         prompt = self._build_semantic_prompt(question, context)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
@@ -110,7 +173,6 @@ class AnswerComposer:
                     SourceReference(
                         document_id=doc_id,
                         document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
-                        excerpt=chunk["text"][:300],
                     )
                 )
 
@@ -135,7 +197,9 @@ class AnswerComposer:
                 structured_lines.append(f"Document {filename}: {field_str}")
             structured_context = "\n".join(structured_lines)
 
-        semantic_context = self._build_context(chunks) if chunks else ""
+        semantic_context = result.graph_context or (self._build_context(chunks) if chunks else "")
+        if result.graph_context:
+            result.trace.add_step("Using graph-enriched context for hybrid")
 
         prompt = self._build_hybrid_prompt(
             question, structured_context, semantic_context
@@ -164,7 +228,6 @@ class AnswerComposer:
                     SourceReference(
                         document_id=doc_id,
                         document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
-                        excerpt=chunk["text"][:300],
                     )
                 )
 

@@ -148,7 +148,6 @@ async def _stream_events(
                 sources.append({
                     "document_id": str(doc_id),
                     "document_name": chunk.get("filename", "Unknown"),
-                    "excerpt": (chunk.get("text") or "")[:300],
                 })
 
         # Also add structured-document sources
@@ -159,7 +158,6 @@ async def _stream_events(
                 sources.append({
                     "document_id": doc_id,
                     "document_name": doc.get("metadata", {}).get("filename", "Unknown"),
-                    "excerpt": "",
                 })
 
         yield _sse("sources", {"sources": sources})

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { AnswerDisplay } from "./answer-display";
 import { StreamingAnswer } from "./streaming-answer";
 import type { ChatMessage } from "@/hooks/use-chat";
@@ -125,7 +124,6 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
                   <div className="max-w-[85%]">
                     <StreamingAnswer
                       content={msg.content}
-                      trace={msg.response?.trace}
                       sources={msg.response?.sources}
                       streaming={true}
                       onOpenGraph={onOpenGraph}
@@ -133,12 +131,7 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
                   </div>
                 ) : (
                   <div className="max-w-[85%]">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Badge variant="outline" className="text-[10px]">
-                        {msg.response?.trace.strategy}
-                      </Badge>
-                    </div>
-                    <AnswerDisplay question={msg.content} response={msg.response!} onOpenGraph={onOpenGraph} />
+                    <AnswerDisplay response={msg.response!} onOpenGraph={onOpenGraph} />
                   </div>
                 )}
               </div>

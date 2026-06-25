@@ -43,9 +43,6 @@ export interface DocumentChunk {
 export interface SourceReference {
   document_id: string;
   document_name: string;
-  chunk_index: number | null;
-  page: number | null;
-  excerpt: string;
 }
 
 export interface ExecutionTrace {

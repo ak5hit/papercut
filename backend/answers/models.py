@@ -6,17 +6,11 @@ from pydantic import BaseModel
 class SourceReference(BaseModel):
     document_id: str
     document_name: str
-    chunk_index: int | None = None
-    page: int | None = None
-    excerpt: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "document_id": self.document_id,
             "document_name": self.document_name,
-            "chunk_index": self.chunk_index,
-            "page": self.page,
-            "excerpt": self.excerpt,
         }
 
 
@@ -24,6 +18,10 @@ class ComposedAnswer(BaseModel):
     answer: str
     sources: list[SourceReference]
     trace: dict[str, Any]
+    # Keep generated_cypher on the model for server-side debugging/logging.
+    # Deliberately excluded from to_dict() — the frontend does not render it.
+    generated_cypher: str | None = None
+    cypher_context: list[dict[str, Any]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {

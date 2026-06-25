@@ -1,14 +1,12 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { SourceReferences } from "./source-references";
-import type { ExecutionTrace, SourceReference } from "@/lib/types";
+import type { SourceReference } from "@/lib/types";
 
 interface StreamingAnswerProps {
   content: string;
-  trace?: ExecutionTrace;
   sources?: SourceReference[];
   streaming?: boolean;
   onOpenGraph?: (documentId: string) => void;
@@ -16,28 +14,14 @@ interface StreamingAnswerProps {
 
 export function StreamingAnswer({
   content,
-  trace,
   sources,
   streaming,
   onOpenGraph,
 }: StreamingAnswerProps) {
   return (
-    <div className="space-y-3">
-      {trace && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px]">
-            {trace.strategy}
-          </Badge>
-          {trace.steps && trace.steps.length > 0 && (
-            <span className="text-[10px] text-muted-foreground">
-              {trace.steps.length} steps
-            </span>
-          )}
-        </div>
-      )}
-
-      <Card>
-        <CardContent className="pt-4">
+    <div className="space-y-2">
+      <Card className="rounded-2xl border-0 shadow-none bg-muted/40">
+        <CardContent className="px-4 py-3">
           {content ? (
             <MarkdownRenderer content={content} />
           ) : (

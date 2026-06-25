@@ -1,11 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { SourceReference } from "@/lib/types";
 
 interface SourceReferencesProps {
@@ -14,61 +11,46 @@ interface SourceReferencesProps {
 }
 
 export function SourceReferences({ sources, onOpenGraph }: SourceReferencesProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   return (
-    <Card>
+    <div>
       <Button
         variant="ghost"
+        size="sm"
         onClick={() => setExpanded(!expanded)}
-        className="w-full justify-between p-3 h-auto"
+        className="h-auto px-2 py-1 text-xs text-muted-foreground gap-1"
       >
-        <span className="flex items-center gap-2 text-sm font-medium">
-          <FileText className="h-4 w-4" />
-          Sources ({sources.length})
-        </span>
+        Sources ({sources.length})
         <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform ${
+          className={`h-3 w-3 transition-transform ${
             expanded ? "rotate-180" : ""
           }`}
         />
       </Button>
       {expanded && (
-        <CardContent className="pt-0">
-          <ScrollArea className="max-h-60">
-            <div className="space-y-2">
-              {sources.map((source, i) => (
-                <div key={i} className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    {onOpenGraph ? (
-                      <button
-                        onClick={() => onOpenGraph(source.document_id)}
-                        className="font-medium text-sm flex-1 truncate text-left hover:text-primary transition-colors"
-                      >
-                        {source.document_name}
-                      </button>
-                    ) : (
-                      <p className="font-medium text-sm flex-1 truncate">
-                        {source.document_name}
-                      </p>
-                    )}
-                    {source.page !== null && (
-                      <Badge variant="secondary" className="text-xs">
-                        Page {source.page}
-                      </Badge>
-                    )}
-                  </div>
-                  {source.excerpt && (
-                    <p className="text-xs text-muted-foreground italic line-clamp-2">
-                      &quot;{source.excerpt}...&quot;
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {sources.map((source, i) => (
+            onOpenGraph ? (
+              <button
+                key={i}
+                onClick={() => onOpenGraph(source.document_id)}
+                className="inline-flex items-center gap-1 rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground hover:text-primary hover:bg-muted/80 transition-colors"
+              >
+                {source.document_name}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </button>
+            ) : (
+              <span
+                key={i}
+                className="inline-flex items-center rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground"
+              >
+                {source.document_name}
+              </span>
+            )
+          ))}
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
