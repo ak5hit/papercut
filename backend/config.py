@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     embedding_provider: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384
+    retrieval_min_similarity: float = 0.3
 
     # Graph extraction
     graph_extraction_enabled: bool = True

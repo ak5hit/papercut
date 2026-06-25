@@ -21,7 +21,7 @@ class QueryPlanner:
     ) -> None:
         self.classifier = QueryClassifier(llm_provider)
         self.structured = StructuredRetriever(document_store.session)
-        self.semantic = SemanticRetriever(document_store, embedding_provider)
+        self.semantic = SemanticRetriever(document_store, embedding_provider, settings=settings)
         self.hybrid = HybridRetriever(self.structured, self.semantic)
         self.store = document_store
         self.settings = settings
@@ -59,11 +59,9 @@ class QueryPlanner:
                 field_filters=field_filters or None,
                 entity_name=classification.entity_name,
             )
-            chunks = await self.semantic.search(question, limit=10)
             trace.structured_results_count = len(docs)
-            trace.semantic_results_count = len(chunks)
-            trace.add_step(f"Retrieved {len(docs)} documents, {len(chunks)} chunks")
-            return QueryResult(trace=trace, documents=docs, chunks=chunks)
+            trace.add_step(f"Retrieved {len(docs)} documents")
+            return QueryResult(trace=trace, documents=docs, chunks=[])
 
         if category == "GRAPH":
             trace = ExecutionTrace(strategy="graph")

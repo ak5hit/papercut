@@ -72,12 +72,14 @@ class GraphRetriever:
         raw_embedding = self.embedder.embed([question])[0]
         emb_str = "[" + ",".join(str(float(v)) for v in raw_embedding) + "]"
 
+        threshold = self.settings.retrieval_min_similarity if self.settings else 0.3
         sql = text(
             f"""
             SELECT id, document_id, text, chunk_index,
                    1 - (embedding <=> '{emb_str}'::vector) AS score
             FROM document_chunks
             WHERE embedding IS NOT NULL
+              AND 1 - (embedding <=> '{emb_str}'::vector) >= {threshold}
             ORDER BY embedding <=> '{emb_str}'::vector
             LIMIT {limit}
             """

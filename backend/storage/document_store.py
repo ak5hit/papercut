@@ -94,7 +94,7 @@ class DocumentStore:
         return True
 
     async def semantic_search(
-        self, query_embedding: list[float], limit: int = 5
+        self, query_embedding: list[float], limit: int = 5, min_similarity: float = 0.3
     ) -> list[ChunkSearchResult]:
         result = await self.session.execute(
             select(
@@ -104,6 +104,7 @@ class DocumentStore:
             )
             .join(DocumentModel, DocumentChunkModel.document_id == DocumentModel.id)
             .where(DocumentChunkModel.embedding.is_not(None))
+            .where(DocumentChunkModel.embedding.cosine_distance(query_embedding) <= 1.0 - min_similarity)
             .order_by("distance")
             .limit(limit)
         )
