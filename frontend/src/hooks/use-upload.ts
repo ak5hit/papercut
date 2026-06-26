@@ -10,7 +10,7 @@ function createInitialPhases(): UploadPhaseState[] {
   return [
     { key: "reading", label: "Reading document", status: "pending", durationMs: 0 },
     { key: "embedding", label: "Generating embeddings", status: "pending", durationMs: 0 },
-    { key: "extracting", label: "Extracting entities", status: "pending", durationMs: 0 },
+    { key: "extracting", label: "Extracting entities", status: "pending", durationMs: 0, hint: "LLM call in progress" },
     { key: "building", label: "Building knowledge graph", status: "pending", durationMs: 0 },
   ];
 }
@@ -33,14 +33,15 @@ export function useUpload() {
   const startTimer = useCallback((idx: number) => {
     clearTimers();
     timerRef.current = setInterval(() => {
+      const now = performance.now();
       setPhases((prev) =>
         prev.map((p, i) =>
-          i === idx && p.status === "active"
-            ? { ...p, durationMs: p.durationMs + 100 }
+          i === idx && p.status === "active" && p.startedAt
+            ? { ...p, durationMs: Math.round(now - p.startedAt) }
             : p,
         ),
       );
-    }, 100);
+    }, 200);
   }, [clearTimers]);
 
   const upload = useCallback(async (file: File) => {
@@ -55,23 +56,25 @@ export function useUpload() {
         if (event.type === "done") {
           clearTimers();
           setPhases((prev) =>
-            prev.map((p, i) =>
-              p.status === "active" ? { ...p, status: "done" } : p,
+            prev.map((p) =>
+              p.status === "active"
+                ? { ...p, status: "done", durationMs: p.startedAt ? Math.round(performance.now() - p.startedAt) : p.durationMs }
+                : p,
             ),
           );
           setDocResult(event as Record<string, unknown>);
-          activeRef.current = -1;
           break;
         } else if (event.type === "error") {
           clearTimers();
           const msg = (event as { message?: string }).message || "Upload failed";
           setError(msg);
           setPhases((prev) =>
-            prev.map((p, i) =>
-              p.status === "active" ? { ...p, status: "error" } : p,
+            prev.map((p) =>
+              p.status === "active"
+                ? { ...p, status: "error", durationMs: p.startedAt ? Math.round(performance.now() - p.startedAt) : p.durationMs }
+                : p,
             ),
           );
-          activeRef.current = -1;
           break;
         } else if (event.type === "phase") {
           const { phase, label } = event as unknown as { phase: string; label: string };
@@ -79,14 +82,15 @@ export function useUpload() {
           if (idx === -1) continue;
 
           clearTimers();
+          const now = performance.now();
           setPhases((prev) => {
             const prevActiveIdx = prev.findIndex((p) => p.status === "active");
             return prev.map((p, i) => {
               if (i === prevActiveIdx && i !== idx) {
-                return { ...p, status: "done" };
+                return { ...p, status: "done", durationMs: p.startedAt ? Math.round(now - p.startedAt) : p.durationMs };
               }
               if (i === idx) {
-                return { ...p, status: "active", label };
+                return { ...p, status: "active", label, startedAt: now, durationMs: 0 };
               }
               return p;
             });
@@ -99,18 +103,20 @@ export function useUpload() {
       const msg = err instanceof Error ? err.message : "Upload failed";
       setError(msg);
       setPhases((prev) =>
-        prev.map((p, i) =>
-          p.status === "active" ? { ...p, status: "error" } : p,
+        prev.map((p) =>
+          p.status === "active"
+            ? { ...p, status: "error", durationMs: p.startedAt ? Math.round(performance.now() - p.startedAt) : p.durationMs }
+            : p,
         ),
       );
-      activeRef.current = -1;
     } finally {
       clearTimers();
       setUploading(false);
-      // Fallback: mark any phase still stuck on "active" as done
       setPhases((prev) =>
         prev.map((p) =>
-          p.status === "active" ? { ...p, status: "done" } : p,
+          p.status === "active"
+            ? { ...p, status: "done", durationMs: p.startedAt ? Math.round(performance.now() - p.startedAt) : p.durationMs }
+            : p,
         ),
       );
     }

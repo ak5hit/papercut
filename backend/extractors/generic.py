@@ -100,15 +100,31 @@ class GenericExtractor(Extractor):
             await self.document_store.update_embedding_status(doc.id, "failed")
             doc.embedding_status = "failed"
 
-        trace.set_phase(PHASE_EXTRACTING)
-        if on_phase:
-            await on_phase(PHASE_EXTRACTING, PHASE_LABELS[PHASE_EXTRACTING])
-
         if self.settings and self.settings.graph_extraction_enabled and self.llm_provider:
             from graph.age_connection import create_age_graph
             from graph.extractor import GraphExtractor
             from graph.store import GraphStore
 
+            chunks_for_graph = [
+                {"id": str(c.id), "text": c.text, "position": c.chunk_index}
+                for c in chunks
+            ]
+
+            # === EXTRACTING PHASE: LLM-based entity extraction ===
+            trace.set_phase(PHASE_EXTRACTING)
+            if on_phase:
+                await on_phase(PHASE_EXTRACTING, PHASE_LABELS[PHASE_EXTRACTING])
+
+            try:
+                graph_ext = GraphExtractor(self.settings)
+                graph_docs = await graph_ext.extract(chunks_for_graph)
+                trace.add_step(f"Extracted {len(graph_docs)} graph documents")
+            except Exception as exc:
+                trace.add_step(f"Entity extraction failed: {exc}")
+                logging.exception("Entity extraction failed for document %s", doc.id)
+                raise
+
+            # === BUILDING PHASE: graph persistence and postprocessing ===
             trace.set_phase(PHASE_BUILDING)
             if on_phase:
                 await on_phase(PHASE_BUILDING, PHASE_LABELS[PHASE_BUILDING])
@@ -117,18 +133,9 @@ class GenericExtractor(Extractor):
                 age_graph = create_age_graph(self.settings)
                 graph_store = GraphStore(age_graph, self.settings)
 
-                chunks_for_graph = [
-                    {"id": str(c.id), "text": c.text, "position": c.chunk_index}
-                    for c in chunks
-                ]
-
                 await graph_store.add_document_and_chunks(
                     doc.id, document.filename, chunks_for_graph
                 )
-
-                graph_ext = GraphExtractor(self.settings)
-                graph_docs = await graph_ext.extract(chunks_for_graph)
-
                 await graph_store.add_graph_documents(graph_docs)
                 await graph_store.link_chunks_to_entities(
                     graph_docs, {str(c.id): c.id for c in chunks}
@@ -146,11 +153,11 @@ class GenericExtractor(Extractor):
 
                 node_count = await graph_store.count_nodes(doc.id)
                 edge_count = await graph_store.count_edges(doc.id)
-                trace.add_step(f"Extracted graph: {node_count} nodes, {edge_count} edges")
+                trace.add_step(f"Built graph: {node_count} nodes, {edge_count} edges")
 
             except Exception as exc:
-                trace.add_step(f"Graph extraction failed: {exc}")
-                logging.exception("Graph extraction failed for document %s", doc.id)
+                trace.add_step(f"Graph building failed: {exc}")
+                logging.exception("Graph building failed for document %s", doc.id)
                 raise
 
         trace.add_step("Saved to database")

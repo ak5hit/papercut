@@ -12,6 +12,8 @@ export interface UploadPhaseState {
   label: string;
   status: "pending" | "active" | "done" | "error";
   durationMs: number;
+  startedAt?: number;
+  hint?: string;
 }
 
 export interface PipelineTraceStep {

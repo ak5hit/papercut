@@ -31,21 +31,28 @@ export function UploadProgress({ phases, totalDurationMs }: UploadProgressProps)
               </div>
             )}
           </div>
-          <span
-            className={`text-sm ${
-              phase.status === "active"
-                ? "font-medium text-blue-600 dark:text-blue-400"
-                : phase.status === "done"
-                ? "text-muted-foreground"
-                : phase.status === "error"
-                ? "text-destructive"
-                : "text-muted-foreground/60"
-            }`}
-          >
-            {phase.label}
-          </span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`text-sm shrink-0 ${
+                phase.status === "active"
+                  ? "font-medium text-blue-600 dark:text-blue-400"
+                  : phase.status === "done"
+                  ? "text-muted-foreground"
+                  : phase.status === "error"
+                  ? "text-destructive"
+                  : "text-muted-foreground/60"
+              }`}
+            >
+              {phase.label}
+            </span>
+            {phase.hint && phase.durationMs > 60000 && phase.status === "active" && (
+              <span className="text-xs text-muted-foreground/60 italic truncate">
+                ({phase.hint})
+              </span>
+            )}
+          </div>
           {phase.durationMs > 0 && (
-            <span className="text-xs text-muted-foreground/60 ml-auto tabular-nums">
+            <span className="text-xs text-muted-foreground/60 ml-auto tabular-nums shrink-0">
               {(phase.durationMs / 1000).toFixed(1)}s
             </span>
           )}
