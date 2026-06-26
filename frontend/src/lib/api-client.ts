@@ -147,7 +147,7 @@ export async function* streamChatMessage(
   sessionId: string | null,
   messages: ChatRequestMessage[],
 ): AsyncGenerator<SSEEvent> {
-  const response = await fetch(`${API_BASE}/query/chat/stream`, {
+  const response = await fetch(`${getBackendBase()}/query/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages, session_id: sessionId }),
