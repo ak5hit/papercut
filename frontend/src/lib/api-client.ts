@@ -147,34 +147,68 @@ export async function* streamChatMessage(
   sessionId: string | null,
   messages: ChatRequestMessage[],
 ): AsyncGenerator<SSEEvent> {
-  const response = await fetch(`${getBackendBase()}/query/chat/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, session_id: sessionId }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP ${response.status}`);
-  }
+  try {
+    const response = await fetch(`${API_BASE}/query/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, session_id: sessionId }),
+      signal: controller.signal,
+    });
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("Response body is not readable");
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || `HTTP ${response.status}`);
+    }
 
-  const decoder = new TextDecoder();
-  let buffer = "";
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Response body is not readable");
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      if (buffer.trim()) {
-        const lines = buffer.split("\n");
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        if (buffer.trim()) {
+          const lines = buffer.split("\n");
+          let eventType = "message";
+          let dataLine = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataLine = line.slice(6).trim();
+          }
+          if (dataLine) {
+            try {
+              const data = JSON.parse(dataLine);
+              yield { type: eventType, ...data };
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+
+      for (const part of parts) {
+        const lines = part.split("\n");
         let eventType = "message";
         let dataLine = "";
+
         for (const line of lines) {
-          if (line.startsWith("event: ")) eventType = line.slice(7).trim();
-          else if (line.startsWith("data: ")) dataLine = line.slice(6).trim();
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataLine = line.slice(6).trim();
+          }
         }
+
         if (dataLine) {
           try {
             const data = JSON.parse(dataLine);
@@ -184,35 +218,14 @@ export async function* streamChatMessage(
           }
         }
       }
-      break;
     }
-
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
-
-    for (const part of parts) {
-      const lines = part.split("\n");
-      let eventType = "message";
-      let dataLine = "";
-
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          dataLine = line.slice(6).trim();
-        }
-      }
-
-      if (dataLine) {
-        try {
-          const data = JSON.parse(dataLine);
-          yield { type: eventType, ...data };
-        } catch {
-          // skip malformed events
-        }
-      }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timed out. Please try again.");
     }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

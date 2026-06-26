@@ -10,6 +10,11 @@ import type { ChatRequestMessage, ExecutionTrace, QueryResponse, SourceReference
 
 const EMPTY_TRACE = { strategy: "", steps: [], structured_results_count: 0, semantic_results_count: 0, graph_results_count: 0 };
 
+let _idCounter = 0;
+function msgId(): string {
+  return `${Date.now().toString(36)}-${(++_idCounter).toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -37,24 +42,11 @@ export function useChat() {
       const trimmed = question.trim();
       if (!trimmed || loading) return;
 
-      setLoading(true);
-      setError(null);
-
       const userMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: msgId(),
         role: "user",
         content: trimmed,
       };
-
-      const placeholderId = crypto.randomUUID();
-      const placeholder: ChatMessage = {
-        id: placeholderId,
-        role: "assistant",
-        content: "",
-        loading: true,
-      };
-
-      setMessages((prev) => [...prev, userMessage, placeholder]);
 
       const apiMessages: ChatRequestMessage[] = [
         ...messagesRef.current.map((m) => ({
@@ -64,7 +56,20 @@ export function useChat() {
         { role: "user" as const, content: trimmed },
       ];
 
+      let placeholderId = "";
+
       try {
+        setLoading(true);
+        setError(null);
+
+        placeholderId = msgId();
+        const placeholder: ChatMessage = {
+          id: placeholderId,
+          role: "assistant",
+          content: "",
+          loading: true,
+        };
+        setMessages((prev) => [...prev, userMessage, placeholder]);
         let currentTrace: ExecutionTrace | null = null;
         let currentSources: SourceReference[] = [];
         let accumulatedContent = "";
