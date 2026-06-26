@@ -79,18 +79,18 @@ export function useUpload() {
           if (idx === -1) continue;
 
           clearTimers();
-          setPhases((prev) =>
-            prev.map((p, i) => {
-              if (i === activeRef.current && p.status === "active") {
+          setPhases((prev) => {
+            const prevActiveIdx = prev.findIndex((p) => p.status === "active");
+            return prev.map((p, i) => {
+              if (i === prevActiveIdx && i !== idx) {
                 return { ...p, status: "done" };
               }
               if (i === idx) {
                 return { ...p, status: "active", label };
               }
               return p;
-            }),
-          );
-          activeRef.current = idx;
+            });
+          });
           setTimeout(() => startTimer(idx), 0);
         }
       }
