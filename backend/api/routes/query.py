@@ -189,6 +189,13 @@ async def _stream_events(
                     "document_name": doc.get("metadata", {}).get("filename", "Unknown"),
                 })
 
+        # Add graph-direct source documents from the Cypher context
+        for src_doc in (result.graph_result or {}).get("source_documents") or []:
+            doc_id = src_doc.get("document_id", "")
+            if doc_id and doc_id not in seen:
+                seen.add(doc_id)
+                sources.append(src_doc)
+
         yield _sse("sources", {"sources": sources})
 
         full_answer = ""

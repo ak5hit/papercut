@@ -119,9 +119,15 @@ class AnswerComposer:
             result.trace.add_step("Generated graph answer via Cypher")
             result.trace.graph_results_count = len(context)
 
+            raw_sources = result.graph_result.get("source_documents") or []
+            graph_sources = [
+                SourceReference(document_id=s["document_id"], document_name=s["document_name"])
+                for s in raw_sources
+            ]
+
             return ComposedAnswer(
                 answer=self._strip_reasoning(answer.strip()),
-                sources=[],
+                sources=graph_sources,
                 trace=result.trace.to_dict(),
                 generated_cypher=cypher,
                 cypher_context=context,

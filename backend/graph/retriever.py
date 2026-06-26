@@ -48,6 +48,52 @@ class GraphRetriever:
             )
         return self._chain
 
+    async def _resolve_source_documents(self, context: list[Any]) -> list[dict[str, str]]:
+        """From raw AGE context rows, extract entity values and look up source documents."""
+        entity_ids: set[str] = set()
+        for row in context:
+            if isinstance(row, dict):
+                for v in row.values():
+                    if isinstance(v, str) and v.strip():
+                        entity_ids.add(v.strip())
+            elif isinstance(row, list | tuple):
+                for item in row:
+                    if isinstance(item, str) and item.strip():
+                        entity_ids.add(item.strip())
+
+        if not entity_ids:
+            return []
+
+        ids_list = ",".join(f"'{eid}'" for eid in entity_ids)
+        query_text = f"""
+        MATCH (c:Chunk)-[:HAS_ENTITY]->(e)
+        WHERE e.id IN [{ids_list}]
+        RETURN DISTINCT c.document_id AS doc_id
+        """
+        try:
+            graph_result = await asyncio.to_thread(self.graph.query, query_text, {})
+        except Exception:
+            return []
+
+        doc_ids: set[str] = set()
+        for row in graph_result or []:
+            doc_id = row.get("doc_id")
+            if doc_id:
+                doc_ids.add(str(doc_id))
+
+        if not doc_ids:
+            return []
+
+        placeholders = ",".join(f"'{did}'" for did in doc_ids)
+        sql = text(
+            f"SELECT id, metadata->>'filename' AS filename FROM documents WHERE id IN ({placeholders})"
+        )
+        pg_result = await self.session.execute(sql)
+        return [
+            {"document_id": str(row.id), "document_name": row.filename or "Unknown"}
+            for row in pg_result
+        ]
+
     async def graph_query(self, question: str) -> dict[str, Any]:
         """GRAPH mode: GraphCypherQAChain generates Cypher -> validates -> AGE executes -> LLM answers."""
         chain = self._get_chain()
@@ -65,7 +111,14 @@ class GraphRetriever:
             elif "context" in step:
                 context = step["context"]
 
-        return {"answer": answer, "cypher": cypher, "context": context}
+        source_documents = await self._resolve_source_documents(context)
+
+        return {
+            "answer": answer,
+            "cypher": cypher,
+            "context": context,
+            "source_documents": source_documents,
+        }
 
     async def enriched_search(self, question: str, limit: int = 5) -> dict[str, Any]:
         """graph_vector mode: vector search on chunks (pgvector) -> expand to entities + relationships (Cypher)."""
