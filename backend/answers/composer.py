@@ -12,6 +12,7 @@ class AnswerComposer:
 
     @staticmethod
     def _strip_reasoning(answer: str) -> str:
+        """Defensive fallback in case the model emits reasoning despite thinking:disabled."""
         import re
         reasoning_pattern = r'^(?:\d+\.\s+\*\*[^*]+\*\*[\s\S]*?\n\n)+'
         match = re.match(reasoning_pattern, answer)
@@ -31,19 +32,29 @@ class AnswerComposer:
                 return answer[match.end():]
         return answer
 
-    async def compose(self, question: str, result: QueryResult) -> ComposedAnswer:
+    @staticmethod
+    def _history_block(history: list[dict[str, Any]] | None) -> str:
+        if not history:
+            return ""
+        lines = [f"{m['role']}: {m['content'][:300]}" for m in history[-6:]]
+        return "CONVERSATION SO FAR:\n" + "\n".join(lines) + "\n\n"
+
+    async def compose(
+        self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
+    ) -> ComposedAnswer:
         strategy = result.trace.strategy
 
         if strategy == "graph":
-            return await self._compose_graph(question, result)
+            return await self._compose_graph(question, result, history=history)
         if strategy == "semantic":
-            return await self._compose_semantic(question, result)
-        return await self._compose_hybrid(question, result)
+            return await self._compose_semantic(question, result, history=history)
+        return await self._compose_hybrid(question, result, history=history)
 
     async def compose_stream(
-        self, question: str, result: QueryResult
+        self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
     ) -> AsyncIterator[str]:
         """Yield answer text tokens from the LLM. Trace/sources are already in result."""
+        hb = self._history_block(history)
         strategy = result.trace.strategy
 
         if strategy == "graph":
@@ -57,7 +68,7 @@ class AnswerComposer:
                 yield "I could not find relevant data to answer this question."
                 return
             prompt = self._build_semantic_prompt(
-                question, context or self._build_context(chunks)
+                question, context or self._build_context(chunks), history_block=hb
             )
             async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
                 yield chunk
@@ -69,7 +80,7 @@ class AnswerComposer:
                 yield "I could not find relevant text in the documents."
                 return
             context = result.graph_context or self._build_context(chunks)
-            prompt = self._build_semantic_prompt(question, context)
+            prompt = self._build_semantic_prompt(question, context, history_block=hb)
             async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
                 yield chunk
             return
@@ -90,13 +101,15 @@ class AnswerComposer:
                 self._build_context(chunks) if chunks else ""
             )
             prompt = self._build_hybrid_prompt(
-                question, structured_context, semantic_context
+                question, structured_context, semantic_context, history_block=hb
             )
             async for chunk in self._llm.stream_complete(prompt, max_tokens=2000):
                 yield chunk
             return
 
-    async def _compose_graph(self, question: str, result: QueryResult) -> ComposedAnswer:
+    async def _compose_graph(
+        self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
+    ) -> ComposedAnswer:
         # If Cypher result is available, use it
         if result.graph_result:
             answer = result.graph_result.get("answer", "No answer generated")
@@ -125,7 +138,8 @@ class AnswerComposer:
                 trace=result.trace.to_dict(),
             )
 
-        prompt = self._build_semantic_prompt(question, context or self._build_context(chunks))
+        hb = self._history_block(history)
+        prompt = self._build_semantic_prompt(question, context or self._build_context(chunks), history_block=hb)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
         seen: set[str] = set()
@@ -148,7 +162,9 @@ class AnswerComposer:
             trace=result.trace.to_dict(),
         )
 
-    async def _compose_semantic(self, question: str, result: QueryResult) -> ComposedAnswer:
+    async def _compose_semantic(
+        self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
+    ) -> ComposedAnswer:
         chunks = result.chunks
         if not chunks:
             return ComposedAnswer(
@@ -160,7 +176,8 @@ class AnswerComposer:
         context = result.graph_context or self._build_context(chunks)
         if result.graph_context:
             result.trace.add_step("Using graph-enriched context")
-        prompt = self._build_semantic_prompt(question, context)
+        hb = self._history_block(history)
+        prompt = self._build_semantic_prompt(question, context, history_block=hb)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
         seen: set[str] = set()
@@ -183,7 +200,9 @@ class AnswerComposer:
             trace=result.trace.to_dict(),
         )
 
-    async def _compose_hybrid(self, question: str, result: QueryResult) -> ComposedAnswer:
+    async def _compose_hybrid(
+        self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
+    ) -> ComposedAnswer:
         docs = result.documents
         chunks = result.chunks
 
@@ -201,8 +220,9 @@ class AnswerComposer:
         if result.graph_context:
             result.trace.add_step("Using graph-enriched context for hybrid")
 
+        hb = self._history_block(history)
         prompt = self._build_hybrid_prompt(
-            question, structured_context, semantic_context
+            question, structured_context, semantic_context, history_block=hb
         )
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
@@ -248,10 +268,12 @@ class AnswerComposer:
             lines.append(f"{source}\n{text}")
         return "\n\n".join(lines)
 
-    def _build_semantic_prompt(self, question: str, context: str) -> str:
+    def _build_semantic_prompt(self, question: str, context: str, history_block: str = "") -> str:
         return (
-            "IMPORTANT: Output ONLY the final answer. Do NOT write any reasoning, "
-            "analysis, or thought process. Start directly with the answer.\n\n"
+            "Answer concisely using ONLY the provided document excerpts. "
+            "Begin with a one-line factual answer, then add brief supporting "
+            "detail from the excerpts if it exists. Do NOT include private "
+            "reasoning, chained calculations, or 'let me think' prose.\n\n"
             "You are a precise document intelligence assistant. "
             "Answer the user's question using ONLY the provided document excerpts. "
             "If the answer is truly not in the excerpts, say "
@@ -264,10 +286,10 @@ class AnswerComposer:
             "For questions about a person's total experience or time at a company, look at the earliest "
             "and latest dates across all experience entries.\n\n"
             "RULES:\n"
-            "- Give ONLY the final answer. Do NOT include your internal reasoning, calculations, or thought process.\n"
             "- Be thorough — include all relevant details from the excerpts. "
             "Do not compress multiple facts or entries into a single sentence.\n"
             "- Use the full context provided — do not omit details.\n\n"
+            f"{history_block}"
             "DOCUMENT EXCERPTS:\n"
             f"{context}\n\n"
             f"QUESTION: {question}\n\n"
@@ -275,23 +297,26 @@ class AnswerComposer:
         )
 
     def _build_hybrid_prompt(
-        self, question: str, structured_context: str, semantic_context: str
+        self, question: str, structured_context: str, semantic_context: str, history_block: str = ""
     ) -> str:
         parts = [
-            "IMPORTANT: Output ONLY the final answer. Do NOT write any reasoning, "
-            "analysis, or thought process. Start directly with the answer.\n\n",
+            "Answer concisely using ONLY the provided structured data and "
+            "document excerpts. Begin with a one-line factual answer, then add "
+            "brief supporting detail from the data if it exists. Do NOT include "
+            "private reasoning, chained calculations, or 'let me think' prose.\n\n",
             "You are a precise document intelligence assistant. "
             "Answer the user's question using ONLY the provided structured data and document excerpts. "
             "If the answer is not in the provided data, say "
             "'The documents do not contain enough information to answer this question.'\n\n",
         ]
+        if history_block:
+            parts.append(history_block)
         if structured_context:
             parts.append(f"STRUCTURED DATA:\n{structured_context}\n\n")
         if semantic_context:
             parts.append(f"DOCUMENT EXCERPTS:\n{semantic_context}\n\n")
         parts.append(
             "RULES:\n"
-            "- Give ONLY the final answer. Do NOT include your internal reasoning, calculations, or thought process.\n"
             "- Be thorough — include all relevant details from the provided data. "
             "Do not compress multiple facts or entries into a single sentence.\n"
             "- If the structured data contains list/array fields, "

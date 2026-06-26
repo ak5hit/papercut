@@ -77,6 +77,11 @@ export function useChat() {
               setSessionId(finalSessionId);
               break;
             }
+            case "contextualize": {
+              // Dev-debugging event — shows the rewrite in Network tab.
+              // Not rendered in the UI.
+              break;
+            }
             case "trace": {
               currentTrace = event as unknown as ExecutionTrace;
               setMessages((prev) =>

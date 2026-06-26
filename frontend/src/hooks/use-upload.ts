@@ -91,7 +91,7 @@ export function useUpload() {
             }),
           );
           activeRef.current = idx;
-          startTimer(idx);
+          setTimeout(() => startTimer(idx), 0);
         }
       }
     } catch (err) {

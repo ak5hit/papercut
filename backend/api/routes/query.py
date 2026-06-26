@@ -9,6 +9,7 @@ from starlette.responses import StreamingResponse
 
 from answers.composer import AnswerComposer
 from api.sse import sse_event as _sse
+from chat.contextualizer import QueryContextualizer
 from chat.schemas import ChatRequest, ChatRequestMessage, ChatResponse
 from chat.sessions import ChatMessage
 from chat.sessions import store as chat_store
@@ -22,18 +23,20 @@ from storage.document_store import DocumentStore
 router = APIRouter(prefix="/query", tags=["query"])
 
 
+def _get_llm_provider() -> Any:
+    llm_provider = None
+    if settings.openai_api_key or settings.llm_provider == "ollama":
+        llm_provider = create_llm_provider(settings)
+    if llm_provider is None:
+        raise HTTPException(status_code=503, detail="LLM provider not configured")
+    return llm_provider
+
+
 async def _build_planner_and_composer(
     session: AsyncSession,
 ) -> tuple[QueryPlanner, AnswerComposer]:
     store = DocumentStore(session)
-
-    llm_provider = None
-    if settings.openai_api_key or settings.llm_provider == "ollama":
-        llm_provider = create_llm_provider(settings)
-
-    if llm_provider is None:
-        raise HTTPException(status_code=503, detail="LLM provider not configured")
-
+    llm_provider = _get_llm_provider()
     embedding_provider = create_embedding_provider(settings)
     planner = QueryPlanner(store, llm_provider, embedding_provider, settings=settings)
     composer = AnswerComposer(llm_provider)
@@ -81,9 +84,23 @@ async def chat(
 
     await chat_store.append(session_id, ChatMessage(role="user", content=question))
 
+    # Contextualize follow-up questions so the pipeline resolves pronouns correctly
+    history = [m for m in payload.messages[:-1]]
+    standalone = question
+    if history:
+        ctx_llm = _get_llm_provider()
+        ctx = QueryContextualizer(ctx_llm)
+        history_dicts = [m.model_dump() for m in history]
+        standalone = await ctx.rewrite(question, history_dicts)
+
     planner, composer = await _build_planner_and_composer(session)
-    result = await planner.execute(question)
-    composed = await composer.compose(question, result)
+    result = await planner.execute(standalone)
+    if standalone != question:
+        result.trace.add_step(f"Contextualized: '{question}' -> '{standalone}'")
+    composed = await composer.compose(
+        standalone, result,
+        history=[m.model_dump() for m in history] if history else None,
+    )
 
     await chat_store.append(session_id, ChatMessage(role="assistant", content=composed.answer))
 
@@ -127,10 +144,22 @@ async def _stream_events(
 
         await chat_store.append(session_id, ChatMessage(role="user", content=question))
 
+        # Contextualize follow-up questions so the pipeline resolves pronouns correctly
+        history = [m for m in payload.messages[:-1]]
+        standalone = question
+        if history:
+            ctx_llm = _get_llm_provider()
+            ctx = QueryContextualizer(ctx_llm)
+            history_dicts = [m.model_dump() for m in history]
+            standalone = await ctx.rewrite(question, history_dicts)
+
         planner, composer = await _build_planner_and_composer(session)
-        result = await planner.execute(question)
+        result = await planner.execute(standalone)
+        if standalone != question:
+            result.trace.add_step(f"Contextualized: '{question}' -> '{standalone}'")
 
         yield _sse("meta", {"session_id": session_id})
+        yield _sse("contextualize", {"original": question, "standalone": standalone})
 
         trace_dict = (
             result.trace.to_dict()
@@ -163,7 +192,8 @@ async def _stream_events(
         yield _sse("sources", {"sources": sources})
 
         full_answer = ""
-        async for token in composer.compose_stream(question, result):
+        comp_history = [m.model_dump() for m in history] if history else None
+        async for token in composer.compose_stream(standalone, result, history=comp_history):
             full_answer += token
             yield _sse("token", {"text": token})
 

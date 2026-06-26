@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -108,6 +109,10 @@ class GenericExtractor(Extractor):
             from graph.extractor import GraphExtractor
             from graph.store import GraphStore
 
+            trace.set_phase(PHASE_BUILDING)
+            if on_phase:
+                await on_phase(PHASE_BUILDING, PHASE_LABELS[PHASE_BUILDING])
+
             try:
                 age_graph = create_age_graph(self.settings)
                 graph_store = GraphStore(age_graph, self.settings)
@@ -123,10 +128,6 @@ class GenericExtractor(Extractor):
 
                 graph_ext = GraphExtractor(self.settings)
                 graph_docs = await graph_ext.extract(chunks_for_graph)
-
-                trace.set_phase(PHASE_BUILDING)
-                if on_phase:
-                    await on_phase(PHASE_BUILDING, PHASE_LABELS[PHASE_BUILDING])
 
                 await graph_store.add_graph_documents(graph_docs)
                 await graph_store.link_chunks_to_entities(
@@ -149,6 +150,8 @@ class GenericExtractor(Extractor):
 
             except Exception as exc:
                 trace.add_step(f"Graph extraction failed: {exc}")
+                logging.exception("Graph extraction failed for document %s", doc.id)
+                raise
 
         trace.add_step("Saved to database")
 
