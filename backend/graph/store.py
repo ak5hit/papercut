@@ -1,9 +1,12 @@
 import asyncio
+import logging
 import re
 from typing import Any
 from uuid import UUID
 
 from config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _strip(value: str | None) -> str:
@@ -31,10 +34,12 @@ class GraphStore:
         document_id: UUID,
         filename: str,
         chunks: list[dict[str, Any]],
-    ) -> None:
+    ) -> int:
         cypher = f"CREATE (d:Document {{id: '{document_id}', filename: '{filename}'}})"
         await self._execute(cypher)
 
+        chunks_created = 0
+        first_error: str | None = None
         for chunk in chunks:
             chunk_id = chunk["id"]
             text_escaped = chunk["text"].replace("'", "\\'")
@@ -48,7 +53,23 @@ class GraphStore:
                 document_id: '{document_id}'
             }})-[:PART_OF]->(d)
             """
-            await self._execute(cypher)
+            try:
+                await self._execute(cypher)
+                chunks_created += 1
+            except Exception as exc:
+                if first_error is None:
+                    first_error = str(exc)
+                logger.warning(
+                    "Chunk CREATE failed for chunk_id=%s text_len=%d: %s",
+                    chunk_id, len(chunk["text"]), exc,
+                )
+
+        if chunks_created < len(chunks):
+            raise RuntimeError(
+                f"add_document_and_chunks: created {chunks_created}/{len(chunks)} chunks"
+                + (f" (first error: {first_error})" if first_error else "")
+            )
+        return chunks_created
 
     async def add_graph_documents(self, graph_documents: list[Any]) -> None:
         """Import graph documents with Python-level dedup.
@@ -91,14 +112,19 @@ class GraphStore:
             """
             try:
                 await self._execute(cypher)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Relationship MERGE failed %s -> %s: %s", escaped_src, escaped_tgt, exc)
 
     async def link_chunks_to_entities(
         self,
         graph_documents: list[Any],
         chunk_id_map: dict[str, Any],
-    ) -> None:
+    ) -> dict[str, Any]:
+        success_count = 0
+        failure_count = 0
+        seen_errors: set[str] = set()
+        unique_errors: list[str] = []
+
         for gd in graph_documents:
             source_ids = gd.source.metadata.get("combined_chunk_ids", [])
             if not source_ids:
@@ -116,8 +142,24 @@ class GraphStore:
                     """
                     try:
                         await self._execute(cypher)
-                    except Exception:
-                        pass
+                        success_count += 1
+                    except Exception as exc:
+                        failure_count += 1
+                        msg = str(exc)
+                        if msg not in seen_errors:
+                            seen_errors.add(msg)
+                            if len(unique_errors) < 5:
+                                unique_errors.append(msg)
+                            logger.warning(
+                                "HAS_ENTITY MERGE failed for chunk=%s entity=%s: %s",
+                                chunk_id, escaped_id, msg,
+                            )
+
+        return {
+            "linked": success_count,
+            "failed": failure_count,
+            "errors": unique_errors,
+        }
 
     async def delete_document(self, document_id: UUID) -> None:
         """Delete a document and its chunks from AGE. Orphan-safe — shared entities survive."""

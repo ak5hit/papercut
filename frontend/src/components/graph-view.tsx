@@ -183,6 +183,14 @@ export function GraphView({ documentId, documentName, containerClassName = "h-[5
           <p className="text-muted-foreground text-sm">
             No graph data found for this document.
           </p>
+          <a
+            href={`/api/graph/documents/${documentId}/stats`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline mt-2"
+          >
+            view graph stats
+          </a>
         </CardContent>
       </Card>
     );
@@ -197,13 +205,21 @@ export function GraphView({ documentId, documentName, containerClassName = "h-[5
           <CardTitle className="text-sm">
             {documentName || "Knowledge Graph"}
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <Badge variant="secondary" className="text-xs">
               {graphData.nodes.length} nodes
             </Badge>
             <Badge variant="secondary" className="text-xs">
               {graphData.edges.length} edges
             </Badge>
+            <a
+              href={`/api/graph/documents/${documentId}/stats`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+            >
+              stats
+            </a>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mt-2">

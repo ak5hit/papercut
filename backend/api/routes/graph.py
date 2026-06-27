@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -7,15 +8,30 @@ from fastapi import APIRouter, HTTPException
 from config import settings
 from graph.age_connection import create_age_graph
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 _age_graph_instance = None
 
 
-def _get_age_graph():
+def _get_age_graph() -> Any:
     global _age_graph_instance
+
     if _age_graph_instance is None:
         _age_graph_instance = create_age_graph(settings)
+        return _age_graph_instance
+
+    try:
+        _age_graph_instance.query("RETURN 1", {})
+    except Exception as exc:
+        logger.info("Reconnecting stale AGE graph instance: %s", exc)
+        try:
+            _age_graph_instance = create_age_graph(settings)
+        except Exception as rebuild_exc:
+            logger.error("Failed to reconnect AGE graph: %s", rebuild_exc)
+            raise
+
     return _age_graph_instance
 
 
@@ -69,3 +85,63 @@ async def get_document_graph(document_id: UUID) -> dict[str, Any]:
             edges.append({"source": source, "target": target, "type": rel_type})
 
     return {"nodes": nodes, "edges": edges}
+
+
+async def _safe_count(age_graph: Any, cypher: str) -> int:
+    try:
+        rows = await asyncio.to_thread(age_graph.query, cypher, {})
+        if not rows:
+            return 0
+        cnt = rows[0].get("cnt", 0)
+        return int(cnt) if cnt is not None else 0
+    except Exception as exc:
+        logger.warning("stats query failed: %s -- %s", exc, cypher[:120])
+        return 0
+
+
+@router.get("/documents/{document_id}/stats")
+async def get_document_graph_stats(document_id: UUID) -> dict[str, Any]:
+    """Per-document AGE node/edge counts for production debugging."""
+    try:
+        age_graph = _get_age_graph()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Graph database unavailable: {exc}")
+
+    doc_id_str = str(document_id)
+
+    document_count = await _safe_count(age_graph,
+        f"MATCH (d:Document {{id: '{doc_id_str}'}}) RETURN count(d) AS cnt"
+    )
+    chunk_count = await _safe_count(age_graph,
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk) RETURN count(c) AS cnt"
+    )
+    entity_count = await _safe_count(age_graph,
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e) "
+        f"RETURN count(DISTINCT e) AS cnt"
+    )
+    has_entity_edges = await _safe_count(age_graph,
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[r:HAS_ENTITY]->() "
+        f"RETURN count(r) AS cnt"
+    )
+
+    try:
+        label_rows = await asyncio.to_thread(age_graph.query, f"""
+            MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e)
+            RETURN DISTINCT labels(e) AS labels
+        """, {})
+        distinct_labels = sorted({
+            (row.get("labels") or ["Entity"])[0]
+            for row in label_rows or []
+            if (row.get("labels") or [None])[0] is not None
+        })
+    except Exception:
+        distinct_labels = []
+
+    return {
+        "document_id": doc_id_str,
+        "document_node_count": document_count,
+        "chunk_node_count": chunk_count,
+        "has_entity_edge_count": has_entity_edges,
+        "entity_count": entity_count,
+        "distinct_entity_labels": distinct_labels,
+    }

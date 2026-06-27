@@ -110,19 +110,12 @@ class GenericExtractor(Extractor):
                 for c in chunks
             ]
 
-            # === EXTRACTING PHASE: LLM-based entity extraction ===
+            graph_ext = GraphExtractor(self.settings)
+            graph_docs = await graph_ext.extract(chunks_for_graph)
+            trace.add_step(f"Extracted {len(graph_docs)} graph documents")
             trace.set_phase(PHASE_EXTRACTING)
             if on_phase:
                 await on_phase(PHASE_EXTRACTING, PHASE_LABELS[PHASE_EXTRACTING])
-
-            try:
-                graph_ext = GraphExtractor(self.settings)
-                graph_docs = await graph_ext.extract(chunks_for_graph)
-                trace.add_step(f"Extracted {len(graph_docs)} graph documents")
-            except Exception as exc:
-                trace.add_step(f"Entity extraction failed: {exc}")
-                logging.exception("Entity extraction failed for document %s", doc.id)
-                raise
 
             # === BUILDING PHASE: graph persistence and postprocessing ===
             trace.set_phase(PHASE_BUILDING)
@@ -133,12 +126,20 @@ class GenericExtractor(Extractor):
                 age_graph = create_age_graph(self.settings)
                 graph_store = GraphStore(age_graph, self.settings)
 
-                await graph_store.add_document_and_chunks(
+                chunks_created = await graph_store.add_document_and_chunks(
                     doc.id, document.filename, chunks_for_graph
                 )
+                trace.add_step(f"Created Document + {chunks_created}/{len(chunks)} chunks in AGE")
+
                 await graph_store.add_graph_documents(graph_docs)
-                await graph_store.link_chunks_to_entities(
+
+                link_result = await graph_store.link_chunks_to_entities(
                     graph_docs, {str(c.id): c.id for c in chunks}
+                )
+                trace.add_step(
+                    f"Linked chunks→entities: {link_result['linked']} linked, "
+                    f"{link_result['failed']} failed"
+                    + (f" (first error: {link_result['errors'][0]})" if link_result['errors'] else "")
                 )
 
                 if self.settings.graph_auto_postprocess and self.llm_provider:
