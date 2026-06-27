@@ -22,6 +22,13 @@ def _strip_label(value: str | None) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "", raw.replace(" ", "_").replace("-", "_"))
 
 
+def _cypher_escape(s: str) -> str:
+    """Escape a string for safe embedding in Cypher single-quoted string literals.
+    Backslash MUST be escaped first, then single quote — order matters to avoid
+    creating a false escape sequence from a trailing backslash."""
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
 
 
 class GraphStore:
@@ -35,14 +42,14 @@ class GraphStore:
         filename: str,
         chunks: list[dict[str, Any]],
     ) -> int:
-        cypher = f"CREATE (d:Document {{id: '{document_id}', filename: '{filename}'}})"
+        cypher = f"CREATE (d:Document {{id: '{document_id}', filename: '{_cypher_escape(filename)}'}})"
         await self._execute(cypher)
 
         chunks_created = 0
         first_error: str | None = None
         for chunk in chunks:
             chunk_id = chunk["id"]
-            text_escaped = chunk["text"].replace("'", "\\'")
+            text_escaped = _cypher_escape(chunk["text"])
             position = chunk.get("position", 0)
             cypher = f"""
             MATCH (d:Document {{id: '{document_id}'}})
@@ -96,7 +103,7 @@ class GraphStore:
                     seen_edges.add((src_id, rel_type, tgt_id))
 
         for node_id, node_type in seen_nodes.items():
-            escaped_id = node_id.replace("'", "\\'")
+            escaped_id = _cypher_escape(node_id)
             safe_type = _strip_label(node_type)
             if safe_type:
                 await self._execute(
@@ -104,8 +111,8 @@ class GraphStore:
                 )
 
         for src_id, rel_type, tgt_id in seen_edges:
-            escaped_src = src_id.replace("'", "\\'")
-            escaped_tgt = tgt_id.replace("'", "\\'")
+            escaped_src = _cypher_escape(src_id)
+            escaped_tgt = _cypher_escape(tgt_id)
             cypher = f"""
             MATCH (a {{id: '{escaped_src}'}}), (b {{id: '{escaped_tgt}'}})
             MERGE (a)-[:`{rel_type}`]->(b)
@@ -133,7 +140,7 @@ class GraphStore:
                 node_id = _strip(node.id)
                 if not node_id:
                     continue
-                escaped_id = node_id.replace("'", "\\'")
+                escaped_id = _cypher_escape(node_id)
                 for chunk_id in source_ids:
                     cypher = f"""
                     MATCH (c:Chunk {{id: '{chunk_id}'}})
