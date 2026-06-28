@@ -39,53 +39,6 @@ class AnswerComposer:
         lines = [f"{m['role']}: {m['content'][:300]}" for m in history[-6:]]
         return "CONVERSATION SO FAR:\n" + "\n".join(lines) + "\n\n"
 
-    @staticmethod
-    def _build_source_list(
-        chunks: list[dict[str, Any]] | None,
-        docs: list[dict[str, Any]] | None = None,
-    ) -> list[SourceReference]:
-        """Build deduped source list with best per-doc score, sorted descending."""
-        seen: set[str] = set()
-        best_score: dict[str, float] = {}
-        sources: list[SourceReference] = []
-
-        # Docs first (structured search — no score)
-        for doc in docs or []:
-            doc_id = doc.get("id", "")
-            if doc_id and doc_id not in seen:
-                seen.add(doc_id)
-                sources.append(SourceReference(
-                    document_id=doc_id,
-                    document_name=doc.get("metadata", {}).get("filename", "Unknown"),
-                ))
-
-        # Chunks have scores
-        for chunk in chunks or []:
-            doc_id = chunk.get("document_id") or chunk.get("id", "")
-            if not doc_id:
-                continue
-            raw_score = chunk.get("score")
-            score_val = float(raw_score) if raw_score is not None else None
-            if doc_id not in seen:
-                seen.add(doc_id)
-                sources.append(SourceReference(
-                    document_id=str(doc_id),
-                    document_name=chunk.get("filename", "Unknown"),
-                    score=score_val,
-                ))
-                if score_val is not None:
-                    best_score[doc_id] = score_val
-            else:
-                if score_val is not None and (doc_id not in best_score or score_val > best_score[doc_id]):
-                    best_score[doc_id] = score_val
-                    for s in sources:
-                        if s.document_id == doc_id:
-                            s.score = score_val
-                            break
-
-        sources.sort(key=lambda s: (1 if s.score is None else 0, -(s.score or 0.0)))
-        return sources
-
     async def compose(
         self, question: str, result: QueryResult, history: list[dict[str, Any]] | None = None
     ) -> ComposedAnswer:
@@ -195,7 +148,18 @@ class AnswerComposer:
         prompt = self._build_semantic_prompt(question, context or self._build_context(chunks), history_block=hb)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
-        sources = self._build_source_list(result.chunks)
+        seen: set[str] = set()
+        sources: list[SourceReference] = []
+        for chunk in chunks or []:
+            doc_id = chunk.get("document_id") or chunk.get("id", "")
+            if str(doc_id) not in seen:
+                seen.add(str(doc_id))
+                sources.append(
+                    SourceReference(
+                        document_id=str(doc_id),
+                        document_name=chunk.get("filename", "Unknown"),
+                    )
+                )
 
         result.trace.add_step("Generated graph answer via enriched context")
         return ComposedAnswer(
@@ -222,7 +186,18 @@ class AnswerComposer:
         prompt = self._build_semantic_prompt(question, context, history_block=hb)
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
-        sources = self._build_source_list(result.chunks)
+        seen: set[str] = set()
+        sources: list[SourceReference] = []
+        for chunk in chunks:
+            doc_id = chunk["document_id"]
+            if doc_id not in seen:
+                seen.add(doc_id)
+                sources.append(
+                    SourceReference(
+                        document_id=doc_id,
+                        document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
+                    )
+                )
 
         result.trace.add_step("Generated semantic answer via LLM")
         return ComposedAnswer(
@@ -257,7 +232,30 @@ class AnswerComposer:
         )
         answer_text = await self._llm.complete(prompt, max_tokens=2000)
 
-        sources = self._build_source_list(chunks, docs)
+        seen: set[str] = set()
+        sources: list[SourceReference] = []
+
+        for doc in docs:
+            doc_id = doc["id"]
+            if doc_id not in seen:
+                seen.add(doc_id)
+                sources.append(
+                    SourceReference(
+                        document_id=doc_id,
+                        document_name=doc.get("metadata", {}).get("filename", "Unknown"),
+                    )
+                )
+
+        for chunk in chunks:
+            doc_id = chunk["document_id"]
+            if doc_id not in seen:
+                seen.add(doc_id)
+                sources.append(
+                    SourceReference(
+                        document_id=doc_id,
+                        document_name=chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown"),
+                    )
+                )
 
         result.trace.add_step("Generated hybrid answer via LLM")
         return ComposedAnswer(

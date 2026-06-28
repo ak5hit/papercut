@@ -70,7 +70,7 @@ export default function HomePage() {
         onDelete={handleDelete}
       />
       <SidebarInset>
-        <SiteHeader isReady={isReady} />
+        <SiteHeader />
         <main className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "upload" | "chat")}>
             <TabsList className="grid w-full grid-cols-2 mb-6">

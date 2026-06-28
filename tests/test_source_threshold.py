@@ -23,7 +23,7 @@ class MockResult:
 
 @pytest.mark.asyncio
 async def test_enriched_search_sql_contains_default_threshold() -> None:
-    """The SQL query includes the default 0.3 similarity threshold."""
+    """The SQL query includes the default 0.5 similarity threshold."""
     doc_id = str(uuid4())
     chunk_id = str(uuid4())
 
@@ -54,7 +54,7 @@ async def test_enriched_search_sql_contains_default_threshold() -> None:
 
     # The first SQL call is the pgvector query — should contain the threshold
     # (second call is the document filename lookup)
-    assert ">= 0.3" in captured_sql[0]
+    assert ">= 0.5" in captured_sql[0]
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_enriched_search_threshold_is_configurable() -> None:
 
 @pytest.mark.asyncio
 async def test_enriched_search_no_settings_uses_default() -> None:
-    """When settings is None, the threshold falls back to 0.3."""
+    """When settings is None, the threshold falls back to the hard-coded 0.3."""
     doc_id = str(uuid4())
     chunk_id = str(uuid4())
 

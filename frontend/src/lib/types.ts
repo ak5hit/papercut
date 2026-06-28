@@ -45,7 +45,6 @@ export interface DocumentChunk {
 export interface SourceReference {
   document_id: string;
   document_name: string;
-  score?: number;
 }
 
 export interface ExecutionTrace {
