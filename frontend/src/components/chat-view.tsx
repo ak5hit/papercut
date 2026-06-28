@@ -32,10 +32,14 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
 
   useEffect(() => {
     if (scrollRef.current) {
-      const el = scrollRef.current;
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
-      });
+      const viewport = scrollRef.current.querySelector<HTMLDivElement>(
+        "[data-radix-scroll-area-viewport]"
+      );
+      if (viewport) {
+        requestAnimationFrame(() => {
+          viewport.scrollTop = viewport.scrollHeight;
+        });
+      }
     }
   }, [messages]);
 

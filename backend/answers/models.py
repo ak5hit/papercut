@@ -6,12 +6,16 @@ from pydantic import BaseModel
 class SourceReference(BaseModel):
     document_id: str
     document_name: str
+    score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "document_id": self.document_id,
             "document_name": self.document_name,
         }
+        if self.score is not None:
+            result["score"] = round(self.score, 4)
+        return result
 
 
 class ComposedAnswer(BaseModel):

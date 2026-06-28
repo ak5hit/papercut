@@ -11,7 +11,7 @@ interface SourceReferencesProps {
 }
 
 export function SourceReferences({ sources, onOpenGraph }: SourceReferencesProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div>
@@ -38,6 +38,11 @@ export function SourceReferences({ sources, onOpenGraph }: SourceReferencesProps
                 className="inline-flex items-center gap-1 rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground hover:text-primary hover:bg-muted/80 transition-colors"
               >
                 {source.document_name}
+                {source.score !== undefined && (
+                  <span className="text-muted-foreground/60 tabular-nums">
+                    ({source.score.toFixed(2)})
+                  </span>
+                )}
                 <ExternalLink className="h-3 w-3 shrink-0" />
               </button>
             ) : (
@@ -46,6 +51,11 @@ export function SourceReferences({ sources, onOpenGraph }: SourceReferencesProps
                 className="inline-flex items-center rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground"
               >
                 {source.document_name}
+                {source.score !== undefined && (
+                  <span className="text-muted-foreground/60 tabular-nums">
+                    ({source.score.toFixed(2)})
+                  </span>
+                )}
               </span>
             )
           ))}

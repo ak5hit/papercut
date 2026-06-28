@@ -169,17 +169,35 @@ async def _stream_events(
         yield _sse("trace", trace_dict)
 
         seen: set[str] = set()
+        best_score: dict[str, float] = {}
         sources: list[dict[str, Any]] = []
         for chunk in result.chunks or []:
             doc_id = chunk.get("document_id") or chunk.get("id", "")
             if str(doc_id) not in seen:
                 seen.add(str(doc_id))
-                sources.append({
+                score = chunk.get("score")
+                score_val = round(float(score), 4) if score is not None else None
+                if score_val is not None:
+                    best_score[str(doc_id)] = score_val
+                source: dict[str, Any] = {
                     "document_id": str(doc_id),
                     "document_name": chunk.get("filename", "Unknown"),
-                })
+                }
+                if score_val is not None:
+                    source["score"] = score_val
+                sources.append(source)
+            else:
+                score = chunk.get("score")
+                if score is not None:
+                    score_val = round(float(score), 4)
+                    if score_val > best_score.get(str(doc_id), 0):
+                        best_score[str(doc_id)] = score_val
+                        for s in sources:
+                            if s["document_id"] == str(doc_id):
+                                s["score"] = score_val
+                                break
 
-        # Also add structured-document sources
+        # Also add structured-document sources (no score)
         for doc in result.documents or []:
             doc_id = doc.get("id", "")
             if doc_id not in seen:
@@ -189,12 +207,15 @@ async def _stream_events(
                     "document_name": doc.get("metadata", {}).get("filename", "Unknown"),
                 })
 
-        # Add graph-direct source documents from the Cypher context
+        # Add graph-direct source documents from the Cypher context (no score)
         for src_doc in (result.graph_result or {}).get("source_documents") or []:
             doc_id = src_doc.get("document_id", "")
             if doc_id and doc_id not in seen:
                 seen.add(doc_id)
                 sources.append(src_doc)
+
+        # Sort by score descending (score=None last)
+        sources.sort(key=lambda s: (1 if s.get("score") is None else 0, -(s.get("score") or 0.0)))
 
         yield _sse("sources", {"sources": sources})
 
