@@ -11,11 +11,11 @@ import { StreamingAnswer } from "./streaming-answer";
 import type { ChatMessage } from "@/hooks/use-chat";
 
 const SUGGESTED_QUESTIONS = [
-  "What is the email address?",
-  "Summarize the work experience",
-  "Which companies did the candidate work at?",
-  "List all people and the organizations they are connected to",
-  "What is the relationship between Akshit Bansal and CRED?",
+  "Summarize the key information across all documents",
+  "List all people, organizations, and locations mentioned",
+  "What are the important dates, amounts, and numbers?",
+  "What are the main topics across these documents?",
+  "Find any contact information like emails, phones, or addresses",
 ];
 
 interface ChatViewProps {
