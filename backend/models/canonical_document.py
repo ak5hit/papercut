@@ -14,6 +14,7 @@ class CanonicalDocument(BaseModel):
     relationships: list[dict[str, Any]] = Field(default_factory=list)
     extraction_strategy: str
     embedding_status: Literal["pending", "completed", "failed"] = "pending"
+    content_hash: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -23,12 +24,14 @@ class CanonicalDocument(BaseModel):
         raw_text: str,
         metadata: dict[str, Any],
         extraction_strategy: str,
+        content_hash: str | None = None,
     ) -> "CanonicalDocument":
         now = datetime.utcnow()
         return cls(
             raw_text=raw_text,
             metadata=metadata,
             extraction_strategy=extraction_strategy,
+            content_hash=content_hash,
             created_at=now,
             updated_at=now,
         )

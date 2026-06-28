@@ -66,7 +66,7 @@ class GraphRetriever:
 
         ids_list = ",".join(f"'{eid}'" for eid in entity_ids)
         query_text = f"""
-        MATCH (c:Chunk)-[:HAS_ENTITY]->(e)
+        MATCH (c:Chunk)-->(e)
         WHERE e.id IN [{ids_list}]
         RETURN DISTINCT c.document_id AS doc_id
         """
@@ -172,7 +172,7 @@ class GraphRetriever:
 
         id_list = ",".join(f"'{cid}'" for cid in chunk_ids)
         query_text = f"""
-        MATCH (c:Chunk)-[:HAS_ENTITY]->(e) WHERE c.id IN [{id_list}]
+        MATCH (c:Chunk)-->(e) WHERE c.id IN [{id_list}]
         RETURN DISTINCT labels(e) AS entity_labels, e.id AS entity_name
         LIMIT 50
         """

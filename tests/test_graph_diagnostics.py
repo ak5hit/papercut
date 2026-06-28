@@ -201,14 +201,13 @@ class TestDocumentGraphStats:
         import api.routes.graph as graph_route_module
 
         def side_effect(cypher: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-            # Match on the key distinguishing phrase
-            if "count(d)" in cypher:
+            if "count(d)" in cypher and "cnt" in cypher:
                 return [{"cnt": 1}]
-            if "count(c)" in cypher:
+            if "RETURN count(c)" in cypher:
                 return [{"cnt": 3}]
             if "count(DISTINCT e)" in cypher:
                 return [{"cnt": 47}]
-            if "count(r)" in cypher:
+            if "RETURN count(e)" in cypher:
                 return [{"cnt": 110}]
             if "labels(e)" in cypher:
                 return [{"labels": ["Person"]}, {"labels": ["Company"]}, {"labels": ["Skill"]}]

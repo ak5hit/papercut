@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from typing import Any
 from uuid import UUID
 
@@ -15,6 +16,22 @@ from storage.database import get_session
 from storage.document_store import DocumentStore
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("/check-duplicate")
+async def check_duplicate(
+    content_hash: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    store = DocumentStore(session)
+    existing = await store.find_duplicate(content_hash)
+    if existing:
+        return {
+            "is_duplicate": True,
+            "existing_id": str(existing.id),
+            "existing_filename": existing.metadata.get("filename"),
+        }
+    return {"is_duplicate": False}
 
 
 def _require_ready(request: Request) -> None:
@@ -37,6 +54,28 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     content = await file.read()
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    from storage.database import async_session_factory
+    async with async_session_factory() as preflight_session:
+        store = DocumentStore(preflight_session)
+        existing = await store.find_duplicate(content_hash)
+        if existing:
+            async def duplicate_event_stream() -> Any:
+                yield sse_event("error", {
+                    "message": f"Document already uploaded: {existing.metadata.get('filename', existing.id)}",
+                    "code": "DUPLICATE",
+                    "existing_id": str(existing.id),
+                })
+            return StreamingResponse(
+                duplicate_event_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
     queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
@@ -44,8 +83,6 @@ async def upload_document(
         await queue.put((phase_key, label))
 
     async def run_extraction() -> tuple[Any, Any]:
-        from storage.database import async_session_factory
-
         async with async_session_factory() as session:
             llm_provider = None
             if app_settings.openai_api_key or app_settings.llm_provider == "ollama":
@@ -58,6 +95,7 @@ async def upload_document(
                 content=content,
                 filename=file.filename or "document.pdf",
                 content_type=file.content_type,
+                content_hash=content_hash,
             )
             doc, trace = await registry.process(document_input, on_phase=on_phase)
             return doc, trace

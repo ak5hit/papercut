@@ -76,6 +76,7 @@ class GenericExtractor(Extractor):
             raw_text=text,
             metadata=metadata,
             extraction_strategy=strategy,
+            content_hash=document.content_hash,
         )
 
         chunks = self._create_chunks(pages, doc.id, document.filename)
@@ -110,12 +111,18 @@ class GenericExtractor(Extractor):
                 for c in chunks
             ]
 
-            graph_ext = GraphExtractor(self.settings)
-            graph_docs = await graph_ext.extract(chunks_for_graph)
-            trace.add_step(f"Extracted {len(graph_docs)} graph documents")
             trace.set_phase(PHASE_EXTRACTING)
             if on_phase:
                 await on_phase(PHASE_EXTRACTING, PHASE_LABELS[PHASE_EXTRACTING])
+
+            try:
+                graph_ext = GraphExtractor(self.settings)
+                graph_docs = await graph_ext.extract(chunks_for_graph)
+                trace.add_step(f"Extracted {len(graph_docs)} graph documents")
+            except Exception as exc:
+                trace.add_step(f"Entity extraction failed: {exc}")
+                logging.exception("Entity extraction failed for document %s", doc.id)
+                raise
 
             # === BUILDING PHASE: graph persistence and postprocessing ===
             trace.set_phase(PHASE_BUILDING)

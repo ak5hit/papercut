@@ -36,6 +36,15 @@ class DocumentStore:
         model = result.scalar_one_or_none()
         return model.to_canonical() if model else None
 
+    async def find_duplicate(self, content_hash: str) -> CanonicalDocument | None:
+        result = await self.session.execute(
+            select(DocumentModel)
+            .where(DocumentModel.content_hash == content_hash)
+            .limit(1)
+        )
+        model = result.scalar_one_or_none()
+        return model.to_canonical() if model else None
+
     async def list_documents(self, limit: int = 100, offset: int = 0) -> list[CanonicalDocument]:
         result = await self.session.execute(
             select(DocumentModel)

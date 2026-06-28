@@ -239,3 +239,12 @@ export async function deleteDocument(id: string): Promise<void> {
     throw new Error(error || `Delete failed: ${response.status}`);
   }
 }
+
+export async function checkDuplicate(
+  contentHash: string,
+): Promise<{ is_duplicate: boolean; existing_id?: string; existing_filename?: string }> {
+  const params = new URLSearchParams({ content_hash: contentHash });
+  const response = await fetch(`${API_BASE}/documents/check-duplicate?${params}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}

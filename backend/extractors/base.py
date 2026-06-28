@@ -12,6 +12,7 @@ class DocumentInput:
     filename: str
     content_type: str | None = None
     document_type: str | None = None
+    content_hash: str | None = None
 
 
 OnPhaseCallback = Callable[[str, str], Awaitable[None]]

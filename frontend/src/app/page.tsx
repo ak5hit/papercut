@@ -91,6 +91,8 @@ export default function HomePage() {
                   onUpload={handleUpload}
                   uploading={uploading}
                   disabled={!isReady}
+                  docResult={docResult}
+                  uploadError={uploadError}
                 />
                 {uploadError && (
                   <p className="text-sm text-destructive mt-2">{uploadError}</p>

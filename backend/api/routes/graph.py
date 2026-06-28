@@ -55,12 +55,12 @@ async def get_document_graph(document_id: UUID) -> dict[str, Any]:
 
     try:
         entity_result = await asyncio.to_thread(age_graph.query, f"""
-            MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e)
+            MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk)-->(e)
             RETURN DISTINCT id(e) AS internal_id, labels(e) AS labels, e.id AS entity_id
         """, {})
 
         entity_edge_result = await asyncio.to_thread(age_graph.query, f"""
-            MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e)-[r]-(other)
+            MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk)-->(e)-[r]-(other)
             WHERE e.id IS NOT NULL AND other.id IS NOT NULL
             RETURN DISTINCT type(r) AS type, e.id AS source, other.id AS target
         """, {})
@@ -113,20 +113,18 @@ async def get_document_graph_stats(document_id: UUID) -> dict[str, Any]:
         f"MATCH (d:Document {{id: '{doc_id_str}'}}) RETURN count(d) AS cnt"
     )
     chunk_count = await _safe_count(age_graph,
-        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk) RETURN count(c) AS cnt"
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk) RETURN count(c) AS cnt"
     )
     entity_count = await _safe_count(age_graph,
-        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e) "
-        f"RETURN count(DISTINCT e) AS cnt"
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk)-->(e) RETURN count(DISTINCT e) AS cnt"
     )
     has_entity_edges = await _safe_count(age_graph,
-        f"MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[r:HAS_ENTITY]->() "
-        f"RETURN count(r) AS cnt"
+        f"MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk)-->(e) RETURN count(e) AS cnt"
     )
 
     try:
         label_rows = await asyncio.to_thread(age_graph.query, f"""
-            MATCH (d:Document {{id: '{doc_id_str}'}})<-[:PART_OF]-(c:Chunk)-[:HAS_ENTITY]->(e)
+            MATCH (d:Document {{id: '{doc_id_str}'}})<--(c:Chunk)-->(e)
             RETURN DISTINCT labels(e) AS labels
         """, {})
         distinct_labels = sorted({

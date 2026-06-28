@@ -173,25 +173,25 @@ class GraphStore:
         doc_id = str(document_id)
         # 1. Detach this doc's chunks from shared entity nodes
         await self._execute(
-            f"MATCH (d:Document {{id: '{doc_id}'}})<-[:PART_OF]-(c:Chunk) "
-            f"MATCH (c)-[r:HAS_ENTITY]->() DELETE r"
+            f"MATCH (d:Document {{id: '{doc_id}'}})<--(c:Chunk) "
+            f"MATCH (c)-[r]->(e) DELETE r"
         )
-        # 2. Delete Chunk nodes + PART_OF edges
+        # 2. Delete Chunk nodes and their edge to the Document
         await self._execute(
-            f"MATCH (c:Chunk)-[r:PART_OF]->(d:Document {{id: '{doc_id}'}}) DELETE r, c"
+            f"MATCH (c:Chunk)-[r]->(d:Document {{id: '{doc_id}'}}) DELETE r, c"
         )
         # 3. Delete the Document node
         await self._execute(f"MATCH (d:Document {{id: '{doc_id}'}}) DELETE d")
-        # 4. Delete edges on now-orphaned entity nodes (shared entities survive — still have HAS_ENTITY)
+        # 4. Delete edges on now-orphaned entity nodes (shared entities survive — still have Chunk->Entity edges)
         await self._execute(
             "MATCH (e) WHERE NOT e:Chunk AND NOT e:Document "
-            "AND NOT EXISTS { MATCH (:Chunk)-[:HAS_ENTITY]->(e) } "
+            "AND NOT EXISTS { MATCH (:Chunk)-->(e) } "
             "MATCH (e)-[r]-() DELETE r"
         )
         # 5. Delete the edge-less orphan nodes
         await self._execute(
             "MATCH (e) WHERE NOT e:Chunk AND NOT e:Document "
-            "AND NOT EXISTS { MATCH (:Chunk)-[:HAS_ENTITY]->(e) } "
+            "AND NOT EXISTS { MATCH (:Chunk)-->(e) } "
             "AND NOT EXISTS { MATCH (e)-[]-() } DELETE e"
         )
 

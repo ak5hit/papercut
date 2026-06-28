@@ -38,6 +38,7 @@ class DocumentModel(Base):
     processed_chunk: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     node_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     rel_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -57,6 +58,7 @@ class DocumentModel(Base):
             relationships=self.relationships,
             extraction_strategy=self.extraction_strategy,
             embedding_status=self.embedding_status,
+            content_hash=self.content_hash,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )
@@ -72,6 +74,7 @@ class DocumentModel(Base):
             relationships=doc.relationships,
             extraction_strategy=doc.extraction_strategy,
             embedding_status=doc.embedding_status,
+            content_hash=doc.content_hash,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
         )

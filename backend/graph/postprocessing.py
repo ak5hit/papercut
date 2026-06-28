@@ -4,6 +4,9 @@ from typing import Any
 from config import Settings
 from llm.base import LLMProvider
 
+_SKIP_REL_TYPES = {"PART_OF", "HAS_ENTITY"}
+
+
 
 class GraphPostProcessor:
     def __init__(self, age_graph: Any, llm_provider: LLMProvider, settings: Settings) -> None:
@@ -28,7 +31,7 @@ class GraphPostProcessor:
         all_types: set[str] = set()
         for row in types_result:
             t = row.get("types") or ""
-            if t:
+            if t and t not in _SKIP_REL_TYPES:
                 all_types.add(t)
 
         if not all_labels and not all_types:
