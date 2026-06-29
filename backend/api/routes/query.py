@@ -15,7 +15,9 @@ from chat.sessions import ChatMessage
 from chat.sessions import store as chat_store
 from config import settings
 from embeddings import create_embedding_provider
+from embeddings.factory import get_embedding_provider
 from llm import create_llm_provider
+from llm.factory import get_llm_provider
 from query.planner import QueryPlanner
 from storage.database import get_session
 from storage.document_store import DocumentStore
@@ -23,21 +25,19 @@ from storage.document_store import DocumentStore
 router = APIRouter(prefix="/query", tags=["query"])
 
 
-def _get_llm_provider() -> Any:
-    llm_provider = None
-    if settings.openai_api_key or settings.llm_provider == "ollama":
-        llm_provider = create_llm_provider(settings)
-    if llm_provider is None:
-        raise HTTPException(status_code=503, detail="LLM provider not configured")
-    return llm_provider
+async def _get_llm_provider() -> Any:
+    try:
+        return await get_llm_provider(settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 async def _build_planner_and_composer(
     session: AsyncSession,
 ) -> tuple[QueryPlanner, AnswerComposer]:
     store = DocumentStore(session)
-    llm_provider = _get_llm_provider()
-    embedding_provider = create_embedding_provider(settings)
+    llm_provider = await _get_llm_provider()
+    embedding_provider = await get_embedding_provider(settings)
     planner = QueryPlanner(store, llm_provider, embedding_provider, settings=settings)
     composer = AnswerComposer(llm_provider)
     return planner, composer
@@ -88,7 +88,7 @@ async def chat(
     history = [m for m in payload.messages[:-1]]
     standalone = question
     if history:
-        ctx_llm = _get_llm_provider()
+        ctx_llm = await _get_llm_provider()
         ctx = QueryContextualizer(ctx_llm)
         history_dicts = [m.model_dump() for m in history]
         standalone = await ctx.rewrite(question, history_dicts)
@@ -150,7 +150,7 @@ async def _stream_events(
         history = [m for m in payload.messages[:-1]]
         standalone = question
         if history:
-            ctx_llm = _get_llm_provider()
+            ctx_llm = await _get_llm_provider()
             ctx = QueryContextualizer(ctx_llm)
             history_dicts = [m.model_dump() for m in history]
             standalone = await ctx.rewrite(question, history_dicts)

@@ -89,21 +89,23 @@ class AnthropicProvider(LLMProvider):
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
         self.model = model
+        self._client = httpx.AsyncClient(timeout=60.0)
 
     async def complete(self, prompt: str, max_tokens: int = 2000) -> str:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
-                json={
-                    "model": self.model,
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-                timeout=60.0,
-            )
-            data = response.json()
-            return data["content"][0]["text"]
+        response = await self._client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
+            json={
+                "model": self.model,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        data = response.json()
+        return data["content"][0]["text"]
+
+    async def close(self) -> None:
+        await self._client.aclose()
 ```
 
 ### 2. Wire into the factory

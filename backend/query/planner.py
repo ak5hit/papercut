@@ -27,8 +27,8 @@ class QueryPlanner:
         self.settings = settings
         self.graph = None
         if settings and settings.graph_extraction_enabled and llm_provider:
-            from graph.age_connection import create_age_graph
-            age_graph = create_age_graph(settings)
+            from graph.age_connection import get_age_graph
+            age_graph = get_age_graph(settings)
             self.graph = GraphRetriever(
                 session=document_store.session,
                 age_graph=age_graph,

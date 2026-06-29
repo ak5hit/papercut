@@ -4,9 +4,23 @@ import pytest
 from httpx import Request, Response
 
 from config import Settings
-from llm.factory import create_llm_provider
+from llm.factory import create_llm_provider, get_llm_provider
 from llm.ollama_provider import OllamaProvider
 from llm.openai_provider import OpenAICompatibleProvider
+
+
+@pytest.mark.asyncio
+async def test_get_llm_provider_returns_cached_instance() -> None:
+    """get_llm_provider should return the same instance on repeated calls."""
+    s = Settings(
+        llm_provider="openai",
+        openai_api_key="test-key",
+        llm_model="gpt-4o-mini",
+        openai_base_url="https://api.openai.com/v1",
+    )
+    p1 = await get_llm_provider(s)
+    p2 = await get_llm_provider(s)
+    assert p1 is p2
 
 
 class TestOpenAIProvider:

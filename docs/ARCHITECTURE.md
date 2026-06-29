@@ -76,15 +76,16 @@ flowchart LR
 
 ### Flow
 
-1. **Classification** — `QueryClassifier` uses an LLM to categorize the question as `STRUCTURED`, `SEMANTIC`, or `HYBRID`. Falls back to `SEMANTIC` for unrecognized outputs.
-2. **Routing** — `QueryPlanner.execute()` dispatches to the appropriate retriever:
-   - **STRUCTURED**: `StructuredRetriever` queries `DocumentModel` using SQLAlchemy JSONB containment operators on `entities` and `structured_fields`.
-   - **SEMANTIC**: `SemanticRetriever` embeds the query and runs a pgvector cosine distance search (< 0.8 threshold) against chunk embeddings.
-   - **HYBRID**: `HybridRetriever` first runs structured pre-filtering (limit 50), then semantic search over the filtered subset.
-3. **Composition** — `AnswerComposer` builds the final response:
-   - **Structured answers**: Direct formatting from database results. No LLM involved for deterministic facts.
-   - **Semantic/hybrid answers**: LLM synthesis from retrieved context, with source references.
-4. **Response** — Every answer includes a `ComposedAnswer` with the answer text, source references (document name, page, excerpt), and execution trace (strategy, steps, result counts).
+1. **Contextualization (follow-ups only)** — `QueryContextualizer` rewrites implicit follow-ups (e.g., "give me top 5 points") into standalone questions using the previous answer.
+2. **Classification** — `QueryClassifier` uses an LLM to categorize the question as `STRUCTURED`, `SEMANTIC`, or `HYBRID`. Falls back to `SEMANTIC` for unrecognized outputs.
+3. **Routing** — `QueryPlanner.execute()` dispatches to the appropriate retriever:
+    - **STRUCTURED**: `StructuredRetriever` queries `DocumentModel` using SQLAlchemy JSONB containment operators on `entities` and `structured_fields`.
+    - **SEMANTIC**: `SemanticRetriever` embeds the query and runs a pgvector cosine distance search (< 0.8 threshold) against chunk embeddings.
+    - **HYBRID**: `HybridRetriever` first runs structured pre-filtering (limit 50), then semantic search over the filtered subset.
+4. **Composition** — `AnswerComposer` builds the final response:
+    - **Structured answers**: Direct formatting from database results. No LLM involved for deterministic facts.
+    - **Semantic/hybrid answers**: LLM synthesis from retrieved context, with source references.
+5. **Response** — Every answer includes a `ComposedAnswer` with the answer text, source references (document-name chips that open the knowledge graph), and execution trace (strategy, steps, result counts).
 
 ### How QueryClassifier Works
 
@@ -96,6 +97,18 @@ The classifier sends an LLM prompt with:
 - **Fallback** — If JSON parsing fails, defaults to SEMANTIC (safest choice for open-ended questions)
 
 The prompt is ~60 lines with explicit rules and examples. Temperature is 0.0 for deterministic classification.
+
+### Chat & Multi-turn Context
+
+The chat endpoint (`POST /query/chat/stream`) maintains an in-memory session:
+
+1. The frontend sends the full message history.
+2. If prior turns exist, `QueryContextualizer` rewrites the latest follow-up into a standalone question, resolving pronouns and implicit references.
+3. The rewritten question is routed through `QueryPlanner` and `AnswerComposer` as usual.
+4. The backend streams SSE events: `progress` → `meta` → `contextualize` → `trace` → `sources` → `token*` → `done`.
+5. The `progress` events give the user coarse feedback: "Understanding your question...", "Searching your documents and knowledge graph...", "Synthesizing the answer...".
+
+Chat history is session-only. A page refresh clears it by design.
 
 ### How AnswerComposer Works
 

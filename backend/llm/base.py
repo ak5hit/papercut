@@ -12,3 +12,7 @@ class LLMProvider(ABC):
         """Yield text chunks as the model generates them."""
         ...
         yield ""  # pragma: no cover
+
+    async def close(self) -> None:
+        """Optional cleanup hook. Override if the provider holds resources."""
+        pass

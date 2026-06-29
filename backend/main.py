@@ -11,6 +11,8 @@ from api.routes.health import router as health_router
 from api.routes.query import router as query_router
 from config import settings
 from embeddings import create_embedding_provider
+from embeddings.factory import get_embedding_provider
+from llm.factory import get_llm_provider
 from storage.database import Base, engine
 
 
@@ -33,7 +35,7 @@ async def _ensure_tables_exist() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("[Startup] Warming up embedding model...")
     app.state.ready = False
-    embedder = create_embedding_provider(settings)
+    embedder = await get_embedding_provider(settings)
     embedder.embed(["warmup"])
 
     print("[Startup] Verifying database tables...")
@@ -43,6 +45,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("[Startup] Embedding model ready.")
     yield
     app.state.ready = False
+
+    print("[Shutdown] Closing LLM provider...")
+    try:
+        llm_provider = await get_llm_provider(settings)
+        await llm_provider.close()
+    except Exception:
+        pass
+    print("[Shutdown] Cleanup complete.")
 
 
 app = FastAPI(

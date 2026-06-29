@@ -20,14 +20,15 @@ This platform separates **symbolic knowledge** (structured fields, entities) fro
 - Plugin-based extractor registry (add new document types in ~50 lines)
 - Dual retrieval engine (structured + semantic + hybrid)
 - LLM-based query classifier (routes questions intelligently)
-- Explainable answers (source references, page numbers, execution traces)
+- Multi-turn chat with streaming SSE, progress stages, and clear-chat
+- Explainable answers (source document chips + execution traces)
 - Full-stack application (FastAPI + Next.js + PostgreSQL + pgvector)
-- 100 tests across 19 files
+- 217 tests across 34 files
 
 **What I deliberately left out:**
 - **Authentication/multi-tenancy** — Out of scope for a document intelligence demo
 - **Multiple document formats** — PDF only, but the plugin architecture makes adding CSV/DOCX/XML trivial (see [Extensibility](#extensibility))
-- **Conversation history** — Single-turn Q&A keeps the focus on retrieval quality
+- **Persistent conversation history** — Chat sessions are in-memory only; refreshing the page resets the conversation. Cross-session persistence is out of scope.
 - **Production deployment** — Docker Compose for local development; no Kubernetes, no Terraform
 
 **Why this scope:**
@@ -66,6 +67,8 @@ docker compose up --build
 ```
 
 Open [http://localhost:3000](http://localhost:3000) and upload a text-based PDF.
+
+You can then ask questions and follow-ups naturally, e.g., "What does this document say about payment terms?" followed by "give me the top 5 points".
 
 > **Note:** The included `Akshit_Bansal_Resume.pdf` works well for testing. For best results, use text-based PDFs (not scanned images).
 
@@ -145,7 +148,7 @@ The registry selects the highest-scoring extractor. Currently registered:
 ### Explainable Answers
 Every response includes:
 - **Answer text** — LLM synthesis for semantic/hybrid, direct formatting for structured
-- **Source references** — Document name, page number, excerpt
+- **Source references** — Document name chips that open the knowledge graph
 - **Execution trace** — Strategy used, steps taken, result counts
 
 No fabricated confidence scores. Trust comes from evidence.
@@ -266,7 +269,6 @@ tests/                Backend test suite (100 tests)
 - **Entity extraction disabled** — Commented out in `GenericExtractor` to speed up uploads. Re-enable by uncommenting lines 97-102 in `backend/extractors/generic.py`.
 - **PDF only** — The plugin architecture supports any format, but only PDF extractors are implemented.
 - **No CI/CD** — Tests run locally. No GitHub Actions, no automated deployment.
-- **Single git commit** — The repository shows the final state, not incremental development.
 - **Sample PDF quality** — `Akshit_Bansal_Resume.pdf` works well; the original `sample_technical_document.pdf` was image-dominant and produced poor extraction results.
 
 ## API

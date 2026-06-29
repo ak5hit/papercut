@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config import Settings
 from query.classifier import ClassificationResult
 from query.execution_trace import ExecutionTrace
 from query.planner import QueryPlanner
@@ -99,3 +100,19 @@ class TestQueryPlannerRouting:
             field_filters={"document_type": "resume", "skills": "Python"},
             entity_name=None,
         )
+
+
+def test_query_planner_uses_get_age_graph() -> None:
+    """QueryPlanner should use the cached get_age_graph when graph extraction is enabled."""
+    settings = Settings(graph_extraction_enabled=True)
+    with patch("graph.age_connection.get_age_graph") as mock_get_age:
+        mock_age = MagicMock()
+        mock_get_age.return_value = mock_age
+        planner = QueryPlanner(
+            document_store=MagicMock(),
+            llm_provider=MagicMock(),
+            embedding_provider=MagicMock(),
+            settings=settings,
+        )
+        mock_get_age.assert_called_once_with(settings)
+        assert planner.graph is not None

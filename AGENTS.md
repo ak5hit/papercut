@@ -193,8 +193,10 @@ A phase is NOT complete until ALL of the following succeed.
 Run:
 
 ```bash
-npm run typecheck
+npm run build
 ```
+
+The frontend has no `typecheck` script. `next build` performs TypeScript validation.
 
 Fix every error.
 
@@ -273,6 +275,8 @@ For example:
 * Process document
 * Query document
 * Receive valid answer
+* Ask a natural follow-up question and receive a valid answer
+* Clear the chat and start a new conversation
 
 Ensure no regression has been introduced.
 
@@ -364,6 +368,7 @@ High-value tests include:
 * Generic Extractor threshold logic
 * Canonical schema validation
 * Query Planner routing
+* Query Contextualizer follow-up rewriting
 * Structured query execution
 * Hybrid retrieval behavior
 
