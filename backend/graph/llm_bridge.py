@@ -20,5 +20,6 @@ def build_langchain_chat(settings: Settings) -> Any:
             base_url=settings.openai_base_url,
             model=settings.llm_model,
             temperature=0,
+            model_kwargs={"thinking": {"type": "disabled"}},
         )
     raise ValueError(f"Unknown LLM provider for graph extraction: {name}")

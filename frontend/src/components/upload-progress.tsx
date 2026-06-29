@@ -45,7 +45,7 @@ export function UploadProgress({ phases, totalDurationMs }: UploadProgressProps)
             >
               {phase.label}
             </span>
-            {phase.hint && phase.durationMs > 45000 && phase.status === "active" && (
+            {phase.hint && phase.durationMs > 30000 && phase.status === "active" && (
               <span className="text-xs text-muted-foreground/60 italic truncate">
                 ({phase.hint})
               </span>
