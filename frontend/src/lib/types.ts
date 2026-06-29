@@ -42,6 +42,11 @@ export interface DocumentChunk {
   metadata: Record<string, unknown>;
 }
 
+export interface ChatProgress {
+  stage: string;
+  message: string;
+}
+
 export interface SourceReference {
   document_id: string;
   document_name: string;

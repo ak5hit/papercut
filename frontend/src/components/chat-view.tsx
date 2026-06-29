@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { AnswerDisplay } from "./answer-display";
 import { StreamingAnswer } from "./streaming-answer";
+import { QueryProgress } from "./query-progress";
 import type { ChatMessage } from "@/hooks/use-chat";
 
 interface ChatViewProps {
@@ -93,10 +94,7 @@ export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments 
                   </div>
                 ) : msg.loading ? (
                   <Card className="max-w-[80%] p-4 bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Thinking...</span>
-                    </div>
+                    <QueryProgress progress={msg.progress} />
                   </Card>
                 ) : msg.error ? (
                   <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-destructive/10 border border-destructive/30">
@@ -118,7 +116,7 @@ export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments 
                     </div>
                   </div>
                 ) : msg.streaming ? (
-                  <div className="max-w-[85%]">
+                  <div className="max-w-[85%] animate-in fade-in duration-500">
                     <StreamingAnswer
                       content={msg.content}
                       sources={msg.response?.sources}
@@ -127,7 +125,7 @@ export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments 
                     />
                   </div>
                 ) : (
-                  <div className="max-w-[85%]">
+                  <div className="max-w-[85%] animate-in fade-in duration-500">
                     <AnswerDisplay response={msg.response!} onOpenGraph={onOpenGraph} />
                   </div>
                 )}

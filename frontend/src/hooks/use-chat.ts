@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { streamChatMessage } from "@/lib/api-client";
-import type { ChatRequestMessage, ExecutionTrace, QueryResponse, SourceReference } from "@/lib/types";
+import type { ChatProgress, ChatRequestMessage, ExecutionTrace, QueryResponse, SourceReference } from "@/lib/types";
 
 const EMPTY_TRACE = { strategy: "", steps: [], structured_results_count: 0, semantic_results_count: 0, graph_results_count: 0 };
 
@@ -23,6 +23,7 @@ export interface ChatMessage {
   loading?: boolean;
   streaming?: boolean;
   error?: string;
+  progress?: ChatProgress;
 }
 
 export function useChat() {
@@ -87,6 +88,16 @@ export function useChat() {
               // Not rendered in the UI.
               break;
             }
+            case "progress": {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === placeholderId
+                    ? { ...m, progress: { stage: event.stage as string, message: event.message as string } }
+                    : m
+                ),
+              );
+              break;
+            }
             case "trace": {
               currentTrace = event as unknown as ExecutionTrace;
               setMessages((prev) =>
@@ -134,6 +145,7 @@ export function useChat() {
                         content: accumulatedContent,
                         streaming: true,
                         loading: false,
+                        progress: undefined,
                         response: {
                           answer: accumulatedContent,
                           sources: currentSources,
@@ -160,6 +172,7 @@ export function useChat() {
                         content: serverAnswer,
                         streaming: false,
                         loading: false,
+                        progress: undefined,
                         response: {
                           answer: serverAnswer,
                           sources: currentSources,
@@ -183,6 +196,7 @@ export function useChat() {
                         content: "",
                         error: errMsg,
                         loading: false,
+                        progress: undefined,
                       }
                     : m,
                 ),

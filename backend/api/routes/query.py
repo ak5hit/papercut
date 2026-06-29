@@ -144,6 +144,8 @@ async def _stream_events(
 
         await chat_store.append(session_id, ChatMessage(role="user", content=question))
 
+        yield _sse("progress", {"stage": "understand", "message": "Understanding your question..."})
+
         # Contextualize follow-up questions so the pipeline resolves pronouns correctly
         history = [m for m in payload.messages[:-1]]
         standalone = question
@@ -152,6 +154,8 @@ async def _stream_events(
             ctx = QueryContextualizer(ctx_llm)
             history_dicts = [m.model_dump() for m in history]
             standalone = await ctx.rewrite(question, history_dicts)
+
+        yield _sse("progress", {"stage": "search", "message": "Searching your documents and knowledge graph..."})
 
         planner, composer = await _build_planner_and_composer(session)
         result = await planner.execute(standalone)
@@ -197,6 +201,8 @@ async def _stream_events(
                 sources.append(src_doc)
 
         yield _sse("sources", {"sources": sources})
+
+        yield _sse("progress", {"stage": "synthesize", "message": "Synthesizing the answer..."})
 
         full_answer = ""
         comp_history = [m.model_dump() for m in history] if history else None
