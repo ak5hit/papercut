@@ -9,7 +9,7 @@ interface StreamingAnswerProps {
   content: string;
   sources?: SourceReference[];
   streaming?: boolean;
-  onOpenGraph?: (documentId: string) => void;
+  onOpenGraph?: (documentId?: string) => void;
 }
 
 export function StreamingAnswer({

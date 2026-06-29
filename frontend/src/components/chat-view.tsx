@@ -10,22 +10,15 @@ import { AnswerDisplay } from "./answer-display";
 import { StreamingAnswer } from "./streaming-answer";
 import type { ChatMessage } from "@/hooks/use-chat";
 
-const SUGGESTED_QUESTIONS = [
-  "Summarize the key information across all documents",
-  "List all people, organizations, and locations mentioned",
-  "What are the important dates, amounts, and numbers?",
-  "What are the main topics across these documents?",
-  "Find any contact information like emails, phones, or addresses",
-];
-
 interface ChatViewProps {
   messages: ChatMessage[];
   loading: boolean;
   onSend: (question: string) => void;
-  onOpenGraph: (documentId: string) => void;
+  onOpenGraph: (documentId?: string) => void;
+  hasDocuments: boolean;
 }
 
-export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewProps) {
+export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments }: ChatViewProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -58,11 +51,6 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
     }
   };
 
-  const handleSuggested = (q: string) => {
-    setInput("");
-    onSend(q);
-  };
-
   const isEmpty = messages.length === 0;
 
   return (
@@ -70,23 +58,28 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
       <ScrollArea ref={scrollRef} className="flex-1 pr-2">
         <div className="space-y-4 pb-4">
           {isEmpty ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <h2 className="text-xl font-semibold mb-2">Ask anything about your documents</h2>
-              <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                Upload a document first, then ask questions about its content.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                {SUGGESTED_QUESTIONS.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => handleSuggested(q)}
-                    disabled={loading}
-                    className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
+              {hasDocuments ? (
+                <>
+                  <h2 className="text-xl font-semibold mb-3">Ask anything about your documents</h2>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Click a document on the left to view its knowledge graph.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Or type a question below to start a conversation.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-xl font-semibold mb-3">No documents yet</h2>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Upload a document to start exploring its knowledge graph.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Click the upload button in the sidebar to get started.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             messages.map((msg) => (
@@ -158,13 +151,12 @@ export function ChatView({ messages, loading, onSend, onOpenGraph }: ChatViewPro
           <Button
             type="submit"
             disabled={loading || !input.trim()}
-            className="shrink-0 self-end"
-            size="icon"
+            className="shrink-0 h-[52px] w-[52px] self-end"
           >
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             )}
           </Button>
         </form>

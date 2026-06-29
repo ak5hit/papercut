@@ -7,7 +7,7 @@ import type { QueryResponse } from "@/lib/types";
 
 interface AnswerDisplayProps {
   response: QueryResponse;
-  onOpenGraph?: (documentId: string) => void;
+  onOpenGraph?: (documentId?: string) => void;
 }
 
 export function AnswerDisplay({ response, onOpenGraph }: AnswerDisplayProps) {

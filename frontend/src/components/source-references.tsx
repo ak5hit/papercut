@@ -7,7 +7,7 @@ import type { SourceReference } from "@/lib/types";
 
 interface SourceReferencesProps {
   sources: SourceReference[];
-  onOpenGraph?: (documentId: string) => void;
+  onOpenGraph?: (documentId?: string) => void;
 }
 
 export function SourceReferences({ sources, onOpenGraph }: SourceReferencesProps) {
