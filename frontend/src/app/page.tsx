@@ -126,6 +126,7 @@ export default function HomePage() {
               loading={chatLoading}
               onSend={chatSend}
               onOpenGraph={handleOpenGraph}
+              onClear={chatClear}
               hasDocuments={documents.length > 0}
             />
           )}

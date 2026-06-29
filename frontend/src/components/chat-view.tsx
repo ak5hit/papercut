@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Send, Loader2, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,10 +16,11 @@ interface ChatViewProps {
   loading: boolean;
   onSend: (question: string) => void;
   onOpenGraph: (documentId?: string) => void;
+  onClear: () => void;
   hasDocuments: boolean;
 }
 
-export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments }: ChatViewProps) {
+export function ChatView({ messages, loading, onSend, onOpenGraph, onClear, hasDocuments }: ChatViewProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -56,6 +57,25 @@ export function ChatView({ messages, loading, onSend, onOpenGraph, hasDocuments 
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
+      {!isEmpty && (
+        <div className="flex items-center justify-between mb-2 shrink-0">
+          <h2 className="text-lg font-semibold">Chat</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onClear();
+              setInput("");
+              inputRef.current?.focus();
+            }}
+            disabled={loading}
+            className="gap-1.5 text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear chat
+          </Button>
+        </div>
+      )}
       <ScrollArea ref={scrollRef} className="flex-1 pr-2">
         <div className="space-y-4 pb-4">
           {isEmpty ? (
