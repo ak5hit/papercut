@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { streamUploadDocument } from "@/lib/api-client";
 import type { UploadPhaseState } from "@/lib/types";
 
@@ -20,8 +20,17 @@ export function useUpload() {
   const [error, setError] = useState<string | null>(null);
   const [phases, setPhases] = useState<UploadPhaseState[]>(createInitialPhases());
   const [docResult, setDocResult] = useState<Record<string, unknown> | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const activeRef = useRef<number>(-1);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (docResult || error) {
+      setSelectedFile(null);
+      setDuplicateError(null);
+    }
+  }, [docResult, error]);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) {
@@ -128,5 +137,8 @@ export function useUpload() {
     setError(null);
   }, []);
 
-  return { upload, uploading, error, phases, docResult, reset };
+  return {
+    upload, uploading, error, phases, docResult, reset,
+    selectedFile, setSelectedFile, duplicateError, setDuplicateError,
+  };
 }

@@ -21,7 +21,10 @@ import { useReadiness } from "@/hooks/use-readiness";
 
 export default function HomePage() {
   const { documents, loading: docsLoading, refresh, deleteDocument } = useDocuments();
-  const { upload, uploading, error: uploadError, phases, docResult } = useUpload();
+  const {
+    upload, uploading, error: uploadError, phases, docResult,
+    selectedFile, setSelectedFile, duplicateError, setDuplicateError,
+  } = useUpload();
   const { messages, loading: chatLoading, send: chatSend, clear: chatClear, error: chatError } = useChat();
   const { isReady } = useReadiness();
 
@@ -55,10 +58,10 @@ export default function HomePage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (selectedDocId === id) setSelectedDocId(null);
+    if (graphModalDocId === id) setGraphModalDocId(null);
     try {
       await deleteDocument(id);
-      if (selectedDocId === id) setSelectedDocId(null);
-      if (graphModalDocId === id) setGraphModalDocId(null);
       toast.success("Document deleted");
     } catch {
       toast.error("Failed to delete document");
@@ -94,6 +97,11 @@ export default function HomePage() {
                 disabled={!isReady}
                 docResult={docResult}
                 uploadError={uploadError}
+                selectedFile={selectedFile}
+                duplicateError={duplicateError}
+                onSelectFile={setSelectedFile}
+                onClearFile={() => { setSelectedFile(null); setDuplicateError(null); }}
+                onDuplicateError={setDuplicateError}
               />
               {uploadError && (
                 <p className="text-sm text-destructive mt-2">{uploadError}</p>

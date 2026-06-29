@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef } from "react";
 import { Upload, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,11 @@ interface UploadDropzoneProps {
   disabled?: boolean;
   docResult?: Record<string, unknown> | null;
   uploadError?: string | null;
+  selectedFile: File | null;
+  duplicateError: string | null;
+  onSelectFile: (file: File) => void;
+  onClearFile: () => void;
+  onDuplicateError: (msg: string | null) => void;
 }
 
 export function UploadDropzone({
@@ -20,21 +25,17 @@ export function UploadDropzone({
   disabled = false,
   docResult,
   uploadError,
+  selectedFile,
+  duplicateError,
+  onSelectFile,
+  onClearFile,
+  onDuplicateError,
 }: UploadDropzoneProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (docResult || uploadError) {
-      setSelectedFile(null);
-      setDuplicateError(null);
-    }
-  }, [docResult, uploadError]);
-
   const handleFileSelect = useCallback(async (file: File) => {
-    setSelectedFile(file);
-    setDuplicateError(null);
+    onSelectFile(file);
+    onDuplicateError(null);
 
     try {
       const buffer = await file.arrayBuffer();
@@ -45,14 +46,14 @@ export function UploadDropzone({
 
       const result = await checkDuplicate(contentHash);
       if (result.is_duplicate) {
-        setDuplicateError(
+        onDuplicateError(
           `This document was already uploaded as "${result.existing_filename}"`,
         );
       }
     } catch {
       // Network error — backend enforces duplicate check on upload
     }
-  }, []);
+  }, [onSelectFile, onDuplicateError]);
 
   const triggerUpload = useCallback(() => {
     if (selectedFile && !uploading && !disabled && !duplicateError) {
@@ -76,11 +77,6 @@ export function UploadDropzone({
     const file = e.target.files?.[0];
     if (file) handleFileSelect(file);
   }, [handleFileSelect]);
-
-  const handleReset = useCallback(() => {
-    setSelectedFile(null);
-    setDuplicateError(null);
-  }, []);
 
   return (
     <div className="space-y-3">
@@ -146,8 +142,7 @@ export function UploadDropzone({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setSelectedFile(null);
-                  setDuplicateError(null);
+                  onClearFile();
                   fileInputRef.current?.click();
                 }}
                 disabled={uploading || disabled}

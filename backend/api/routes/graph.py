@@ -6,33 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from config import settings
-from graph.age_connection import create_age_graph
+from graph.age_connection import get_age_graph
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/graph", tags=["graph"])
-
-_age_graph_instance = None
-
-
-def _get_age_graph() -> Any:
-    global _age_graph_instance
-
-    if _age_graph_instance is None:
-        _age_graph_instance = create_age_graph(settings)
-        return _age_graph_instance
-
-    try:
-        _age_graph_instance.query("RETURN 1", {})
-    except Exception as exc:
-        logger.info("Reconnecting stale AGE graph instance: %s", exc)
-        try:
-            _age_graph_instance = create_age_graph(settings)
-        except Exception as rebuild_exc:
-            logger.error("Failed to reconnect AGE graph: %s", rebuild_exc)
-            raise
-
-    return _age_graph_instance
 
 
 def _parse_row(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -47,7 +25,7 @@ def _parse_row(row: dict[str, Any]) -> tuple[str, str, str]:
 async def get_document_graph(document_id: UUID) -> dict[str, Any]:
     """Return entity nodes and entity-to-entity edges for a document's knowledge graph."""
     try:
-        age_graph = _get_age_graph()
+        age_graph = get_age_graph(settings)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Graph database unavailable: {exc}")
 
@@ -103,7 +81,7 @@ async def _safe_count(age_graph: Any, cypher: str) -> int:
 async def get_document_graph_stats(document_id: UUID) -> dict[str, Any]:
     """Per-document AGE node/edge counts for production debugging."""
     try:
-        age_graph = _get_age_graph()
+        age_graph = get_age_graph(settings)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Graph database unavailable: {exc}")
 

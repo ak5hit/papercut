@@ -31,3 +31,22 @@ def create_age_graph(settings: Settings) -> Any:
     conf = _parse_database_url(settings.age_database_url)
     age = AGEGraph(graph_name="doc_graph", conf=conf, create=True)
     return AgeGraphWrapper(age)
+
+
+_cached_age_graph: Any | None = None
+
+
+def get_age_graph(settings: Settings) -> Any:
+    """Return cached AGE graph connection with health check + reconnect."""
+    global _cached_age_graph
+
+    if _cached_age_graph is None:
+        _cached_age_graph = create_age_graph(settings)
+        return _cached_age_graph
+
+    try:
+        _cached_age_graph.query("RETURN 1", {})
+    except Exception:
+        _cached_age_graph = create_age_graph(settings)
+
+    return _cached_age_graph

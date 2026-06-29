@@ -203,9 +203,9 @@ async def delete_document(
 ) -> dict[str, Any]:
     if app_settings.graph_extraction_enabled:
         try:
-            from graph.age_connection import create_age_graph
+            from graph.age_connection import get_age_graph
             from graph.store import GraphStore
-            age_graph = create_age_graph(app_settings)
+            age_graph = get_age_graph(app_settings)
             graph_store = GraphStore(age_graph, app_settings)
             await graph_store.delete_document(document_id)
         except Exception:
