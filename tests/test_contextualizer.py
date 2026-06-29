@@ -1,6 +1,7 @@
 import pytest
 
 from chat.contextualizer import QueryContextualizer
+from tests.fixtures.document_snippets import CRED_PROJECTS, F1_DATABASE, ZAMP_EXPECTATIONS
 
 
 @pytest.mark.asyncio
@@ -78,10 +79,68 @@ async def test_history_truncates_to_max_pairs() -> None:
         for i in range(10)
     ]
     await ctx.rewrite("follow-up", history)
-    # The prompt sent to the LLM should contain at most 4 "role:" lines
     prompt = llm.last_prompt
-    role_count = prompt.count("role:")
-    assert role_count <= 4, f"Expected <=4 role: lines, got {role_count}"
+    conv_section = prompt[prompt.index("CONVERSATION SO FAR:"):]
+    msg_count = conv_section.count("user:") + conv_section.count("assistant:")
+    assert msg_count <= 4, f"Expected <=4 message lines in prompt, got {msg_count}"
+
+
+@pytest.mark.asyncio
+async def test_rewrite_expands_implicit_topic_continuation_with_real_doc() -> None:
+    """Follow-up with implicit reference is expanded to include the topic from a real document."""
+    llm = _mock_llm(
+        "What are the top 5 things Zamp expects from candidates in the project round?"
+    )
+    ctx = QueryContextualizer(llm)
+    history = [
+        {"role": "user", "content": "What does Zamp expect from candidates?"},
+        {"role": "assistant", "content": ZAMP_EXPECTATIONS},
+    ]
+    result = await ctx.rewrite("give me top 5 points", history)
+    assert "top 5" in result.lower()
+    assert "zamp" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_rewrite_detects_new_topic_pivot() -> None:
+    """Follow-up about a completely different topic is returned unchanged."""
+    llm = _mock_llm("What is the capital of France?")
+    ctx = QueryContextualizer(llm)
+    history = [
+        {"role": "user", "content": "What does Zamp expect from candidates?"},
+        {"role": "assistant", "content": ZAMP_EXPECTATIONS},
+    ]
+    result = await ctx.rewrite("What is the capital of France?", history)
+    assert "zamp" not in result.lower()
+    assert "france" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_rewrite_resolves_pronoun_with_real_doc() -> None:
+    """Pronoun references are resolved to entities mentioned in real document content."""
+    llm = _mock_llm("What problem does F1 database solve?")
+    ctx = QueryContextualizer(llm)
+    history = [
+        {"role": "user", "content": "What is F1 database?"},
+        {"role": "assistant", "content": F1_DATABASE},
+    ]
+    result = await ctx.rewrite("What problem does it solve?", history)
+    assert "f1" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_prompt_includes_real_doc_context() -> None:
+    """The prompt sent to the LLM contains the actual document excerpt and the follow-up."""
+    llm = _mock_llm("some rewrite")
+    ctx = QueryContextualizer(llm)
+    history = [
+        {"role": "user", "content": "What did Akshit build at CRED?"},
+        {"role": "assistant", "content": CRED_PROJECTS},
+    ]
+    await ctx.rewrite("give me top 5 projects", history)
+    assert "Datalens" in llm.last_prompt
+    assert "Mixpanel" in llm.last_prompt
+    assert "top 5" in llm.last_prompt
 
 
 class _mock_llm:
