@@ -266,11 +266,12 @@ class AnswerComposer:
 
     def _build_context(self, chunks: list[dict[str, Any]]) -> str:
         lines = []
-        for i, chunk in enumerate(chunks, 1):
+        for chunk in chunks:
             text = chunk["text"]
+            filename = chunk.get("filename") or chunk.get("metadata", {}).get("filename", "Unknown")
             meta = chunk.get("metadata", {})
             page = meta.get("page")
-            source = f"[Chunk {chunk['chunk_index']}" + (f", Page {page}]" if page else "]")
+            source = f"[Document: {filename}, Chunk {chunk['chunk_index']}" + (f", Page {page}]" if page else "]")
             lines.append(f"{source}\n{text}")
         return "\n\n".join(lines)
 
@@ -294,7 +295,10 @@ class AnswerComposer:
             "RULES:\n"
             "- Be thorough — include all relevant details from the excerpts. "
             "Do not compress multiple facts or entries into a single sentence.\n"
-            "- Use the full context provided — do not omit details.\n\n"
+            "- Use the full context provided — do not omit details.\n"
+            "- Document filenames shown in excerpt headers are reliable evidence. "
+            "If a filename matches the question topic, treat that as relevant information "
+            "and answer with the content from that document.\n\n"
             f"{history_block}"
             "DOCUMENT EXCERPTS:\n"
             f"{context}\n\n"
@@ -328,7 +332,10 @@ class AnswerComposer:
             "- If the structured data contains list/array fields, "
             "include ALL items from those lists as bullet points. "
             "Do not summarize or skip items unless the user explicitly asks for a subset.\n"
-            "- Use the full context provided — do not omit details.\n\n"
+            "- Use the full context provided — do not omit details.\n"
+            "- Document filenames shown in excerpt headers are reliable evidence. "
+            "If a filename matches the question topic, treat that as relevant information "
+            "and answer with the content from that document.\n\n"
             f"QUESTION: {question}\n\n"
             "Provide a thorough, factual answer."
         )

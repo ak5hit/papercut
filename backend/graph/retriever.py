@@ -217,7 +217,15 @@ class GraphRetriever:
         return {"context": context, "chunks": chunks, "entities": entities, "relationships": relationships}
 
     def _build_graph_context(self, chunks: list[Any], entities: list[Any], relationships: list[Any]) -> str:
-        texts = [c["text"] for c in chunks]
+        texts = []
+        for c in chunks:
+            if isinstance(c, dict):
+                filename = c.get("filename") or c.get("metadata", {}).get("filename", "Unknown")
+                text = c["text"]
+            else:
+                filename = "Unknown"
+                text = str(c)
+            texts.append(f"[Document: {filename}]\n{text}")
         text_content = "\n----\n".join(texts)
 
         entity_lines = []
